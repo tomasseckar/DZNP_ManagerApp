@@ -1,0 +1,49 @@
+<core:FragmentDefinition
+  xmlns:core="sap.ui.core"
+  xmlns="sap.m"
+  xmlns:form="sap.ui.layout.form">
+
+  <Panel id="dznpCustomCriteriaPanel" expandable="false" class="sapUiSmallMargin">
+    <content>
+
+      <form:SimpleForm
+        id="dznpCustomCriteriaForm"
+        editable="true"
+        layout="ResponsiveGridLayout"
+        labelSpanXL="2"
+        labelSpanL="3"
+        labelSpanM="4"
+        labelSpanS="12"
+        columnsXL="2"
+        columnsL="2"
+        columnsM="1">
+
+        <Label id="dznpLblYear" text="Rok" />
+        <Input id="dznpInpYear" width="10rem" />
+
+        <Label id="dznpLblApprover" text="Schvalovatel" />
+        <HBox id="dznpBxApprover">
+          <Input id="dznpInpApprover" width="10rem" editable="false" />
+          <Text id="dznpTxtApproverName" text="" class="sapUiTinyMarginBegin"/>
+        </HBox>
+
+        <Label id="dznpLblScope" text="Sestava za" />
+        <RadioButtonGroup id="dznpRbScope" columns="2" select=".onScopeChanged">
+          <buttons>
+            <RadioButton id="dznpRbMgr" text="Vedoucí" selected="true"/>
+            <RadioButton id="dznpRbOrg" text="Organizační jednotku"/>
+          </buttons>
+        </RadioButtonGroup>
+
+        <Label id="dznpLblOrgUnit" text="Org. jednotka" />
+        <ComboBox id="dznpCbOrgUnit" enabled="false" placeholder="Organizační jednotka..." />
+
+      </form:SimpleForm>
+
+      <Text id="dznpCustomCriteriaDebug"
+            text="DEBUG: Custom criteria fragment loaded ✅"
+            class="sapUiTinyMarginBegin"/>
+    </content>
+  </Panel>
+
+</core:FragmentDefinition>
