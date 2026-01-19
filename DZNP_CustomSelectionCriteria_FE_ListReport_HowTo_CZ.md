@@ -1,8 +1,20 @@
 # DZNP Manager – vlastní „Výběrová kritéria“ nad List Reportem (Fiori Elements V4)
-*(step-by-step návod + vysvětlení, proč je to ohnuté a na co si dát pozor)*
+*(step-by-step návod v češtině + vysvětlení, proč je to ohnuté a na co si dát pozor)*
 
 > **Cíl:** Schovat standardní FE FilterBar a místo něj zobrazit vlastní blok „Výběrová kritéria“ nad tabulkou v **Fiori Elements List Report (OData V4)**.  
 > **Výsledek:** Vložíme vlastní fragment nad tabulku tak, že zabalíme obsah `sap.f.DynamicPage.content` (0..1) do `sap.m.VBox` (multi) a vložíme fragment jako první položku.
+
+
+## Obsah
+
+- [1) Proč to nešlo "normálně"](#1-proč-to-nešlo-normálně)
+- [2) Prerekvizity / kontrola projektu](#2-prerekvizity--kontrola-projektu)
+- [3) Implementace krok za krokem](#3-implementace-krok-za-krokem)
+- [4) Spuštění a ověření, že to funguje](#4-spuštění-a-ověření-že-to-funguje)
+- [5) Nejčastější problémy a řešení](#5-nejčastější-problémy-a-řešení)
+- [6) Je to "stable" a je to dobrá cesta?](#6-je-to-stable-a-je-to-dobrá-cesta)
+- [7) Mini checklist pro replikaci](#7-mini-checklist-pro-replikaci)
+- [8) Předvyplnění pole Schvalovatel (uživatel z FLP vs DEFAULT_USER)](#8-předvyplnění-pole-schvalovatel-uživatel-z-flp-vs-default_user)
 
 ---
 
@@ -305,4 +317,279 @@ Pokud ano, je možné že jsi vložil panel do špatného parentu (jiný runtime
 3) Zaregistruj controller extension v manifestu  
 4) V controlleru: najdi `TableAPI` → parent `DynamicPage` → wrap do `VBox`  
 5) Ověř logy + debug text v UI
+
+
+---
+
+## 8) Předvyplnění pole Schvalovatel (uživatel z FLP vs DEFAULT_USER)
+
+### 8.1 Proč v BAS často vidíš `DEFAULT_USER`
+Když aplikaci spouštíš lokálně přes Fiori tools (`fiori run`) a otvíráš ji v **FLP sandboxu** (`test/flp.html#app-preview`), nejedeš proti reálnému ABAP FLP (Launchpadu) a často ani nemáš přihlášení jako „skutečný“ uživatel. Proto je v sandboxu typicky k dispozici jen „dummy“ uživatel (často právě **`DEFAULT_USER`**).
+
+- V **reálném FLP na ABAPu** (otevřené jako tile v systému) se `sap.ushell.Container` napojí na skutečný runtime a `UserInfo` vrátí reálného uživatele.
+- V **BAS / lokálním sandboxu** je `UserInfo` buď nedostupné, nebo vrací defaultního uživatele.
+
+Proto dává smysl mít v kódu:
+1) pokus o získání uživatele přes `sap.ushell` (když běží FLP)
+2) **fallback** na `DEFAULT_USER` (aby UI fungovalo i lokálně)
+
+### 8.2 Co přesně chceme udělat
+Chceme při startu obrazovky automaticky doplnit:
+- `dznpInpApprover` (Input) → uživatelské jméno / id (např. `WOZNIAK2`)
+- `dznpTxtApproverName` (Text) → celé jméno (pokud ho umíme získat)
+
+> Důležité: protože fragment vkládáme dynamicky po renderu, **nemůžeš spoléhat na `this.base.getView().byId(...)`**. Nejjednodušší je používat `sap.ui.getCore().byId(...)` a zároveň mít malý retry, kdyby se UI ještě nestihlo vytvořit.
+
+### 8.3 Krok za krokem (co změnit v kódu)
+
+#### Krok 1 – Ujisti se, že fragment má správné ID
+V souboru `webapp/ext/fragment/CustomFilterBar.fragment.xml` musí být inputy přesně takto (už je máš):
+
+```xml
+<Label id="dznpLblApprover" text="Schvalovatel" />
+<HBox id="dznpBxApprover">
+  <Input id="dznpInpApprover" width="10rem" editable="false" />
+  <Text id="dznpTxtApproverName" text="" class="sapUiTinyMarginBegin"/>
+</HBox>
+```
+
+#### Krok 2 – Přidej do controlleru helper na získání uživatele
+Do `webapp/ext/controller/ListReport.controller.js` přidej metodu `_getCurrentUserSafe()`:
+
+```js
+_getCurrentUserSafe: async function () {
+  // Default pro BAS / lokální sandbox
+  const oFallback = { id: "DEFAULT_USER", fullName: "Default User" };
+
+  try {
+    // sap.ushell je dostupné jen ve FLP runtime (ne v čistém index.html)
+    if (!sap.ushell || !sap.ushell.Container) {
+      return oFallback;
+    }
+
+    // Novější API: getServiceAsync
+    if (sap.ushell.Container.getServiceAsync) {
+      const oUserInfo = await sap.ushell.Container.getServiceAsync("UserInfo");
+      const oUser = oUserInfo && oUserInfo.getUser && oUserInfo.getUser();
+      if (!oUser) return oFallback;
+
+      const sId = (oUser.getId && oUser.getId()) || oUser.getId || oFallback.id;
+      const sFullName = (oUser.getFullName && oUser.getFullName()) || oUser.getFullName || "";
+      return { id: sId || oFallback.id, fullName: sFullName || oFallback.fullName };
+    }
+
+    // Starší API: getService
+    if (sap.ushell.Container.getService) {
+      const oUserInfo = sap.ushell.Container.getService("UserInfo");
+      const oUser = oUserInfo && oUserInfo.getUser && oUserInfo.getUser();
+      if (!oUser) return oFallback;
+
+      const sId = (oUser.getId && oUser.getId()) || oUser.getId || oFallback.id;
+      const sFullName = (oUser.getFullName && oUser.getFullName()) || oUser.getFullName || "";
+      return { id: sId || oFallback.id, fullName: sFullName || oFallback.fullName };
+    }
+
+    return oFallback;
+  } catch (e) {
+    console.warn("DZNP: UserInfo not available, using fallback", e);
+    return oFallback;
+  }
+}
+```
+
+#### Krok 3 – Přidej helper na bezpečné získání controlů (core.byId + retry)
+Do stejného controlleru přidej metodu `_setApproverFieldsWithRetry()`:
+
+```js
+_setApproverFieldsWithRetry: async function (iAttempt) {
+  const iTry = iAttempt || 1;
+
+  const oInp = sap.ui.getCore().byId("dznpInpApprover");
+  const oTxt = sap.ui.getCore().byId("dznpTxtApproverName");
+
+  // UI ještě není hotové → chvíli počkej a zkus znovu
+  if ((!oInp || !oTxt) && iTry <= 10) {
+    setTimeout(this._setApproverFieldsWithRetry.bind(this, iTry + 1), 150);
+    return;
+  }
+
+  if (!oInp || !oTxt) {
+    console.warn("DZNP: Approver controls not found (dznpInpApprover / dznpTxtApproverName)");
+    return;
+  }
+
+  const oUser = await this._getCurrentUserSafe();
+
+  oInp.setValue(oUser.id);
+  oTxt.setText(oUser.fullName || "");
+
+  console.log("DZNP: Approver filled:", oUser.id, oUser.fullName);
+}
+```
+
+#### Krok 4 – Zavolej naplnění Schvalovatele až po vložení fragmentu do stránky
+V metodě `_injectCriteriaAboveTable()` (tam, kde po úspěšném zabalení `DynamicPage.content` nastavuješ `_bInjected = true`) přidej volání:
+
+```js
+// ... po úspěšném vložení fragmentu do VBox (a po setAggregation)
+this._bInjected = true;
+
+// Naplň schvalovatele (později – až bude UI opravdu v DOM)
+this._setApproverFieldsWithRetry(1);
+
+console.log("DZNP: Wrapped DynamicPage.content with VBox and inserted criteria ✅");
+return;
+```
+
+> Proč retry: FE runtime a render může být ještě „v pohybu“ a někdy se stane, že hned po `setAggregation` ještě nejsou všechny prvky zaregistrované v Core.
+
+### 8.4 Kompletní ukázka (jen relevantní části controlleru)
+Aby se ti to dobře kopírovalo, tady je „skelet“ s místy, kam to patří:
+
+```js
+sap.ui.define([
+  "sap/ui/core/mvc/ControllerExtension",
+  "sap/ui/core/Fragment"
+], function (ControllerExtension, Fragment) {
+  "use strict";
+
+  return ControllerExtension.extend("dznp.ext.controller.ListReport", {
+    override: {
+      onAfterRendering: function () {
+        this._injectCriteriaAboveTable();
+      }
+    },
+
+    onScopeChanged: function (oEvent) {
+      const iIdx = oEvent.getSource().getSelectedIndex();
+      const bOrg = iIdx === 1;
+
+      const oCB = sap.ui.getCore().byId("dznpCbOrgUnit");
+      if (oCB) {
+        oCB.setEnabled(bOrg);
+      }
+    },
+
+    _getCurrentUserSafe: async function () {
+      const oFallback = { id: "DEFAULT_USER", fullName: "Default User" };
+
+      try {
+        if (!sap.ushell || !sap.ushell.Container) {
+          return oFallback;
+        }
+
+        if (sap.ushell.Container.getServiceAsync) {
+          const oUserInfo = await sap.ushell.Container.getServiceAsync("UserInfo");
+          const oUser = oUserInfo && oUserInfo.getUser && oUserInfo.getUser();
+          if (!oUser) return oFallback;
+
+          const sId = (oUser.getId && oUser.getId()) || oUser.getId || oFallback.id;
+          const sFullName = (oUser.getFullName && oUser.getFullName()) || oUser.getFullName || "";
+          return { id: sId || oFallback.id, fullName: sFullName || oFallback.fullName };
+        }
+
+        if (sap.ushell.Container.getService) {
+          const oUserInfo = sap.ushell.Container.getService("UserInfo");
+          const oUser = oUserInfo && oUserInfo.getUser && oUserInfo.getUser();
+          if (!oUser) return oFallback;
+
+          const sId = (oUser.getId && oUser.getId()) || oUser.getId || oFallback.id;
+          const sFullName = (oUser.getFullName && oUser.getFullName()) || oUser.getFullName || "";
+          return { id: sId || oFallback.id, fullName: sFullName || oFallback.fullName };
+        }
+
+        return oFallback;
+      } catch (e) {
+        console.warn("DZNP: UserInfo not available, using fallback", e);
+        return oFallback;
+      }
+    },
+
+    _setApproverFieldsWithRetry: async function (iAttempt) {
+      const iTry = iAttempt || 1;
+      const oInp = sap.ui.getCore().byId("dznpInpApprover");
+      const oTxt = sap.ui.getCore().byId("dznpTxtApproverName");
+
+      if ((!oInp || !oTxt) && iTry <= 10) {
+        setTimeout(this._setApproverFieldsWithRetry.bind(this, iTry + 1), 150);
+        return;
+      }
+
+      if (!oInp || !oTxt) {
+        console.warn("DZNP: Approver controls not found");
+        return;
+      }
+
+      const oUser = await this._getCurrentUserSafe();
+      oInp.setValue(oUser.id);
+      oTxt.setText(oUser.fullName || "");
+      console.log("DZNP: Approver filled:", oUser.id, oUser.fullName);
+    },
+
+    _injectCriteriaAboveTable: async function () {
+      try {
+        if (this._bInjected) return;
+
+        const oView = this.base.getView();
+
+        const aTableApi = oView.findAggregatedObjects(true, function (o) {
+          return o && o.isA && o.isA("sap.fe.macros.table.TableAPI");
+        });
+
+        const oTableApi = aTableApi && aTableApi[0];
+        if (!oTableApi) {
+          setTimeout(this._injectCriteriaAboveTable.bind(this), 300);
+          return;
+        }
+
+        const oParent = oTableApi.getParent();
+        if (!oParent) return;
+
+        if (!this._oCriteriaFrag) {
+          this._oCriteriaFrag = await Fragment.load({
+            name: "dznp.ext.fragment.CustomFilterBar",
+            controller: this
+          });
+        }
+
+        if (oParent.isA && oParent.isA("sap.f.DynamicPage")) {
+          const sAggr = "content";
+          const oOldContent = oParent.getAggregation(sAggr);
+
+          if (oOldContent && oOldContent.isA && oOldContent.isA("sap.m.VBox") &&
+              oOldContent.data("dznpWrapped") === true) {
+            this._bInjected = true;
+            return;
+          }
+
+          const oBox = new sap.m.VBox({ width: "100%" });
+          oBox.data("dznpWrapped", true);
+
+          oBox.addItem(this._oCriteriaFrag);
+
+          if (oOldContent) {
+            oParent.setAggregation(sAggr, null);
+            oBox.addItem(oOldContent);
+          }
+
+          oParent.setAggregation(sAggr, oBox);
+
+          this._bInjected = true;
+          this._setApproverFieldsWithRetry(1);
+          console.log("DZNP: Wrapped DynamicPage.content with VBox and inserted criteria ✅");
+          return;
+        }
+
+      } catch (e) {
+        console.error("DZNP: _injectCriteriaAboveTable FAILED", e);
+      }
+    }
+  });
+});
+```
+
+### 8.5 Jak si ověřit, že to běží správně
+1) Otevři aplikaci ve FLP (ideálně reálný ABAP FLP) → v poli Schvalovatel uvidíš svůj skutečný `sy-uname` / uživatele.
+2) V BAS sandboxu je OK, že uvidíš `DEFAULT_USER` (není to chyba tvého kódu, ale prostředí).
+3) V konzoli uvidíš log `DZNP: Approver filled: ...`.
 

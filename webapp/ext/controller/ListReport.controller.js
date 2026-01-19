@@ -1,29 +1,96 @@
 sap.ui.define([
   "sap/ui/core/mvc/ControllerExtension",
-  "sap/ui/core/Fragment"
-], function (ControllerExtension, Fragment) {
+  "sap/ui/core/Fragment",
+  "sap/m/VBox"
+], function (ControllerExtension, Fragment, VBox) {
   "use strict";
 
   return ControllerExtension.extend("dznp.ext.controller.ListReport", {
     override: {
-      // Po renderu už existuje UI strom (DynamicPage + TableAPI), takže se dá bezpečně zasáhnout
       onAfterRendering: function () {
+        // 1) vlož fragment nad tabulku (wrap content)
         this._injectCriteriaAboveTable();
       }
     },
 
-    // Handler z fragmentu (RadioButtonGroup select=".onScopeChanged")
+    // =========================================================
+    // Event z fragmentu
+    // =========================================================
     onScopeChanged: function (oEvent) {
       const iIdx = oEvent.getSource().getSelectedIndex(); // 0 = Vedoucí, 1 = Org
       const bOrg = iIdx === 1;
 
-      const oView = this.base.getView();
-      const oCB = oView.byId("dznpCbOrgUnit") || sap.ui.getCore().byId("dznpCbOrgUnit");
+      const oCB = this._byFragId("dznpCbOrgUnit");
       if (oCB) {
         oCB.setEnabled(bOrg);
+        if (!bOrg) {
+          // volitelně při přepnutí zpět na Vedoucí vyčisti OU
+          if (oCB.setSelectedKey) {
+            oCB.setSelectedKey("");
+          }
+          if (oCB.setValue) {
+            oCB.setValue("");
+          }
+        }
       }
     },
 
+    // =========================================================
+    // Helper: najdi control ve fragmentu bezpečně
+    // =========================================================
+    _byFragId: function (sLocalId) {
+      if (!this._sFragId) {
+        return null;
+      }
+      return Fragment.byId(this._sFragId, sLocalId);
+    },
+
+    // =========================================================
+    // Naplnění Approver polí z FLP UserInfo
+    // =========================================================
+    _fillApproverFromShell: function () {
+      // Fragment ještě nemusí být hotový => retry
+      const oInpApprover = this._byFragId("dznpInpApprover");
+      const oTxtName = this._byFragId("dznpTxtApproverName");
+
+      if (!oInpApprover || !oTxtName) {
+        setTimeout(this._fillApproverFromShell.bind(this), 200);
+        return;
+      }
+
+      let sId = "";
+      let sFullName = "";
+
+      try {
+        const oUser = sap.ushell
+          && sap.ushell.Container
+          && sap.ushell.Container.getService
+          && sap.ushell.Container.getService("UserInfo")
+          && sap.ushell.Container.getService("UserInfo").getUser
+          && sap.ushell.Container.getService("UserInfo").getUser();
+
+        if (oUser) {
+          sId = (oUser.getId && oUser.getId()) || "";
+          sFullName = (oUser.getFullName && oUser.getFullName()) || "";
+        }
+      } catch (e) {
+        console.warn("DZNP: UserInfo service not available (not running in FLP?)", e);
+      }
+
+      // fallback: když není full name, dej aspoň ID
+      if (!sFullName) {
+        sFullName = sId;
+      }
+
+      oInpApprover.setValue(sId);
+      oTxtName.setText(sFullName);
+
+      console.log("DZNP: Approver filled:", sId, sFullName);
+    },
+
+    // =========================================================
+    // Hlavní injekt (VBox wrap)
+    // =========================================================
     _injectCriteriaAboveTable: async function () {
       try {
         // idempotence: FE může re-renderovat → nechceme vkládat 2×
@@ -55,9 +122,13 @@ sap.ui.define([
           "parentAggr =", oTableApi.sParentAggregationName
         );
 
-        // 3) Načti fragment jen jednou
+        // 3) Načti fragment jen jednou + DŮLEŽITÉ: dej mu ID prefix
         if (!this._oCriteriaFrag) {
+          // prefix = stabilní, unikátní pro daný FE view
+          this._sFragId = oView.createId("dznpCriteria");
+
           this._oCriteriaFrag = await Fragment.load({
+            id: this._sFragId,                    // <<< KLÍČOVÉ (prefix pro všechna ID v fragmentu)
             name: "dznp.ext.fragment.CustomFilterBar",
             controller: this
           });
@@ -69,14 +140,18 @@ sap.ui.define([
           const oOldContent = oParent.getAggregation(sAggr); // 0..1
 
           // Pokud už je jednou zabalené, skonči
-          if (oOldContent && oOldContent.isA && oOldContent.isA("sap.m.VBox") &&
-              oOldContent.data("dznpWrapped") === true) {
+          if (
+            oOldContent
+            && oOldContent.isA
+            && oOldContent.isA("sap.m.VBox")
+            && oOldContent.data("dznpWrapped") === true
+          ) {
             console.log("DZNP: DynamicPage.content already wrapped");
             this._bInjected = true;
             return;
           }
 
-          const oBox = new sap.m.VBox({ width: "100%" });
+          const oBox = new VBox({ width: "100%" });
           oBox.data("dznpWrapped", true);
 
           // Náš panel navrch
@@ -93,6 +168,10 @@ sap.ui.define([
 
           this._bInjected = true;
           console.log("DZNP: Wrapped DynamicPage.content with VBox and inserted criteria ✅");
+
+          // 5) Teď už můžeme bezpečně plnit approvera (fragment existuje)
+          this._fillApproverFromShell();
+
           return;
         }
 

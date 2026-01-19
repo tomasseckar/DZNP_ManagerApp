@@ -3,7 +3,11 @@
   xmlns="sap.m"
   xmlns:form="sap.ui.layout.form">
 
-  <Panel id="dznpCustomCriteriaPanel" expandable="false" class="sapUiSmallMargin">
+  <Panel
+    id="dznpCustomCriteriaPanel"
+    expandable="false"
+    class="sapUiSmallMargin">
+
     <content>
 
       <form:SimpleForm
@@ -28,7 +32,7 @@
         </HBox>
 
         <Label id="dznpLblScope" text="Sestava za" />
-        <RadioButtonGroup id="dznpRbScope" columns="2" select=".onScopeChanged">
+        <RadioButtonGroup id="dznpRbScope" columns="2" select="onScopeChanged">
           <buttons>
             <RadioButton id="dznpRbMgr" text="Vedoucí" selected="true"/>
             <RadioButton id="dznpRbOrg" text="Organizační jednotku"/>
@@ -40,9 +44,10 @@
 
       </form:SimpleForm>
 
-      <Text id="dznpCustomCriteriaDebug"
-            text="DEBUG: Custom criteria fragment loaded ✅"
-            class="sapUiTinyMarginBegin"/>
+      <Text
+        id="dznpCustomCriteriaDebug"
+        text="DEBUG: Custom criteria fragment loaded ✅"
+        class="sapUiTinyMarginBegin"/>
     </content>
   </Panel>
 
