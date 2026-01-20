@@ -86,6 +86,12 @@ sap.ui.define(['sap/ui/core/mvc/ControllerExtension','sap/ui/core/Fragment'], fu
 			console.log("DZNP: Approver filled:", oUser.id, oUser.fullName);
 		},
 
+		_getSetCurrentYear: async function () {
+			const oYear = new Date().getFullYear();
+			const oInpYear = sap.ui.getCore().byId("dznpInpYear");
+			oInpYear.setValue(oYear);
+		},
+
 		_injectCriteriaAboveTable: async function () {
 		try {
 			// idempotence: FE může re-renderovat → nechceme vkládat 2×
@@ -155,6 +161,7 @@ sap.ui.define(['sap/ui/core/mvc/ControllerExtension','sap/ui/core/Fragment'], fu
 
 			this._bInjected = true;
 			this._setApproverFieldsWithRetry(1);
+			this._getSetCurrentYear();
 			console.log("DZNP: Wrapped DynamicPage.content with VBox and inserted criteria ✅");
 			return;
 			}
