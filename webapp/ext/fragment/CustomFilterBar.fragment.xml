@@ -28,7 +28,7 @@
         </HBox>
 
         <Label id="dznpLblScope" text="Sestava za" />
-        <RadioButtonGroup id="dznpRbScope" columns="2" select=".onScopeChanged">
+        <RadioButtonGroup id="dznpRbScope" columns="2" select="onScopeChanged">
           <buttons>
             <RadioButton id="dznpRbMgr" text="Vedoucí" selected="true"/>
             <RadioButton id="dznpRbOrg" text="Organizační jednotku"/>

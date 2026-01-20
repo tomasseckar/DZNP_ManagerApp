@@ -30,6 +30,62 @@ sap.ui.define(['sap/ui/core/mvc/ControllerExtension','sap/ui/core/Fragment'], fu
 		}
 		},
 
+		 _getCurrentUserSafe: async function () {
+			const oFallback = { id: "DEFAULT_USER", fullName: "Default User" };
+
+			try {
+				if (!sap.ushell || !sap.ushell.Container) {
+				return oFallback;
+				}
+
+				if (sap.ushell.Container.getServiceAsync) {
+				const oUserInfo = await sap.ushell.Container.getServiceAsync("UserInfo");
+				const oUser = oUserInfo && oUserInfo.getUser && oUserInfo.getUser();
+				if (!oUser) return oFallback;
+
+				const sId = (oUser.getId && oUser.getId()) || oUser.getId || oFallback.id;
+				const sFullName = (oUser.getFullName && oUser.getFullName()) || oUser.getFullName || "";
+				return { id: sId || oFallback.id, fullName: sFullName || oFallback.fullName };
+				}
+
+				if (sap.ushell.Container.getService) {
+				const oUserInfo = sap.ushell.Container.getService("UserInfo");
+				const oUser = oUserInfo && oUserInfo.getUser && oUserInfo.getUser();
+				if (!oUser) return oFallback;
+
+				const sId = (oUser.getId && oUser.getId()) || oUser.getId || oFallback.id;
+				const sFullName = (oUser.getFullName && oUser.getFullName()) || oUser.getFullName || "";
+				return { id: sId || oFallback.id, fullName: sFullName || oFallback.fullName };
+				}
+
+				return oFallback;
+			} catch (e) {
+				console.warn("DZNP: UserInfo not available, using fallback", e);
+				return oFallback;
+			}
+		},
+
+		_setApproverFieldsWithRetry: async function (iAttempt) {
+			const iTry = iAttempt || 1;
+			const oInp = sap.ui.getCore().byId("dznpInpApprover");
+			const oTxt = sap.ui.getCore().byId("dznpTxtApproverName");
+
+			if ((!oInp || !oTxt) && iTry <= 10) {
+				setTimeout(this._setApproverFieldsWithRetry.bind(this, iTry + 1), 150);
+				return;
+			}
+
+			if (!oInp || !oTxt) {
+				console.warn("DZNP: Approver controls not found");
+				return;
+			}
+
+			const oUser = await this._getCurrentUserSafe();
+			oInp.setValue(oUser.id);
+			oTxt.setText(oUser.fullName || "");
+			console.log("DZNP: Approver filled:", oUser.id, oUser.fullName);
+		},
+
 		_injectCriteriaAboveTable: async function () {
 		try {
 			// idempotence: FE může re-renderovat → nechceme vkládat 2×
@@ -98,6 +154,7 @@ sap.ui.define(['sap/ui/core/mvc/ControllerExtension','sap/ui/core/Fragment'], fu
 			oParent.setAggregation(sAggr, oBox);
 
 			this._bInjected = true;
+			this._setApproverFieldsWithRetry(1);
 			console.log("DZNP: Wrapped DynamicPage.content with VBox and inserted criteria ✅");
 			return;
 			}
