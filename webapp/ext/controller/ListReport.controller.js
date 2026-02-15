@@ -2,8 +2,10 @@ sap.ui.define([
   "sap/ui/core/mvc/ControllerExtension",
   "sap/ui/core/Fragment",
   "sap/m/VBox",
-  "sap/ui/mdc/condition/Condition"
-], function (ControllerExtension, Fragment, VBox, Condition) {
+  "sap/base/Log",
+  "sap/ui/model/Filter",
+  "sap/ui/model/FilterOperator"
+], function (ControllerExtension, Fragment, VBox, Log, Filter, FilterOperator) {
   "use strict";
 
   return ControllerExtension.extend("dznp.ext.controller.ListReport", {
@@ -14,7 +16,7 @@ sap.ui.define([
     },
 
     // =========================================================
-    // Event z fragmentu: scope
+    // Eventy z fragmentu
     // =========================================================
     onScopeChanged: function (oEvent) {
       const iIdx = oEvent.getSource().getSelectedIndex(); // 0 = Vedoucí, 1 = Org
@@ -24,82 +26,34 @@ sap.ui.define([
       if (oCB) {
         oCB.setEnabled(bOrg);
 
-        // při přepnutí zpět na Vedoucí vyčisti OU + FE filtr
+        // při přepnutí zpět na Vedoucí vyčisti OU
         if (!bOrg) {
-          if (oCB.setSelectedKey) oCB.setSelectedKey("");
-          if (oCB.setValue) oCB.setValue("");
-
-          this._setFEFilter_OrganizationalUnit("");
+          if (oCB.setSelectedKey) {
+            oCB.setSelectedKey("");
+          }
+          if (oCB.setValue) {
+            oCB.setValue("");
+          }
         }
       }
+
+      // po změně režimu vždy synchronizuj do FE FilterBar + search
+      this._syncFeFiltersAndSearch();
+    },
+
+    onOrgUnitChanged: function () {
+      // OrgUnit změněna => sync + search
+      this._syncFeFiltersAndSearch();
     },
 
     // =========================================================
-    // Event z fragmentu: org unit changed
-    // =========================================================
-    onOrgUnitChanged: function (oEvent) {
-      const oCB = oEvent.getSource();
-      const sKey = (oCB.getSelectedKey && oCB.getSelectedKey()) || "";
-
-      // 1) nastav do FE FilterBar condition modelu
-      this._setFEFilter_OrganizationalUnit(sKey);
-
-      // 2) volitelně rovnou “Go”
-      //    (pokud nechceš auto-search, tenhle blok smaž)
-      const oFB = this._getFEFilterBar();
-      if (oFB && oFB.triggerSearch) {
-        oFB.triggerSearch();
-      }
-    },
-
-    // =========================================================
-    // Helper: najdi control ve fragmentu bezpečně
+    // Helper: najdi control ve fragmentu bezpečně (přes prefix)
     // =========================================================
     _byFragId: function (sLocalId) {
-      if (!this._sFragId) return null;
+      if (!this._sFragId) {
+        return null;
+      }
       return Fragment.byId(this._sFragId, sLocalId);
-    },
-
-    // =========================================================
-    // Helper: FE FilterBar přes ExtensionAPI (nejstabilnější cesta)
-    // =========================================================
-    _getFEFilterBar: function () {
-      const oExt = this.base && this.base.getExtensionAPI && this.base.getExtensionAPI();
-      if (!oExt || !oExt.getFilterBar) return null;
-      return oExt.getFilterBar(); // sap.ui.mdc.FilterBar (většinou)
-    },
-
-    // =========================================================
-    // Nastav FE filtr pro OrganizationalUnit (musí sedět na property v entity)
-    // =========================================================
-    _setFEFilter_OrganizationalUnit: function (sOrgUnitKey) {
-      const oFB = this._getFEFilterBar();
-      if (!oFB) {
-        console.warn("DZNP: FE FilterBar not available (yet).");
-        return;
-      }
-
-      // Název pole musí odpovídat property ve FE (v entitě ListReportu)
-      // Z UI screenshotu to vypadá na "OrganizationalUnit"
-      const sProp = "OrganizationalUnit";
-
-      // FE pracuje s "conditions"
-      // - prázdné => vymazat
-      // - jinak EQ
-      const mConds = oFB.getFilterConditions ? oFB.getFilterConditions() : {};
-      if (!sOrgUnitKey) {
-        mConds[sProp] = [];
-      } else {
-        mConds[sProp] = [Condition.createCondition("EQ", [sOrgUnitKey], null, null)];
-      }
-
-      if (oFB.setFilterConditions) {
-        oFB.setFilterConditions(mConds);
-      } else {
-        console.warn("DZNP: FilterBar has no setFilterConditions(). UI5/FE verze se liší.");
-      }
-
-      console.log("DZNP: FE filter set", sProp, sOrgUnitKey);
     },
 
     // =========================================================
@@ -118,27 +72,195 @@ sap.ui.define([
       let sFullName = "";
 
       try {
-        const oUser = sap.ushell
-          && sap.ushell.Container
-          && sap.ushell.Container.getService
-          && sap.ushell.Container.getService("UserInfo")
-          && sap.ushell.Container.getService("UserInfo").getUser
-          && sap.ushell.Container.getService("UserInfo").getUser();
+        const oUser =
+          sap.ushell &&
+          sap.ushell.Container &&
+          sap.ushell.Container.getService &&
+          sap.ushell.Container.getService("UserInfo") &&
+          sap.ushell.Container.getService("UserInfo").getUser &&
+          sap.ushell.Container.getService("UserInfo").getUser();
 
         if (oUser) {
           sId = (oUser.getId && oUser.getId()) || "";
           sFullName = (oUser.getFullName && oUser.getFullName()) || "";
         }
       } catch (e) {
-        console.warn("DZNP: UserInfo service not available (not running in FLP?)", e);
+        Log.warning("DZNP: UserInfo service not available (not running in FLP?)", e);
       }
 
-      if (!sFullName) sFullName = sId;
+      if (!sFullName) {
+        sFullName = sId;
+      }
 
       oInpApprover.setValue(sId);
       oTxtName.setText(sFullName);
 
-      console.log("DZNP: Approver filled:", sId, sFullName);
+      Log.info("DZNP: Approver filled: " + sId + " " + sFullName);
+    },
+
+    // =========================================================
+    // Vytáhni hodnoty z vlastních kritérií
+    // =========================================================
+    _getCriteriaValues: function () {
+      // ScopeMode: 0=Vedoucí => "MGR", 1=Org jednotka => "ORGEH"
+      const oRb = this._byFragId("dznpRbScope");
+      const iIdx = oRb ? oRb.getSelectedIndex() : 0;
+      const sScopeValue = (iIdx === 1) ? "ORGEH" : "MGR";
+
+      const oCB = this._byFragId("dznpCbOrgUnit");
+      const sOrgKey = oCB && oCB.getSelectedKey ? (oCB.getSelectedKey() || "") : "";
+
+      return {
+        scopeMode: sScopeValue,
+        orgUnit: sOrgKey
+      };
+    },
+
+    // =========================================================
+    // Najdi standardní FE FilterBar (sap.ui.mdc.FilterBar)
+    // =========================================================
+    _getFeFilterBar: function () {
+      const oView = this.base.getView();
+
+      const aFbs = oView.findAggregatedObjects(true, function (o) {
+        return o && o.isA && o.isA("sap.ui.mdc.FilterBar");
+      });
+
+      return aFbs && aFbs[0];
+    },
+
+    // =========================================================
+    // Nastav conditions do FE FilterBar + spusť search (=> $filter v requestu)
+    // =========================================================
+    _syncFeFiltersAndSearch: function () {
+      try {
+        const oFilterBar = this._getFeFilterBar();
+        const v = this._getCriteriaValues();
+
+        // pokud FilterBar ještě není ready, zkus později
+        if (!oFilterBar) {
+          Log.warning("DZNP: FE FilterBar not ready yet -> retry");
+          setTimeout(this._syncFeFiltersAndSearch.bind(this), 250);
+          return;
+        }
+
+        // Conditions formát (mdc):
+        // { PropertyName: [ { operator: "EQ", values: ["..."], validated: "Validated" } ] }
+        const oConds = {};
+
+        // ScopeMode vždy
+        oConds.ScopeMode = [{
+          operator: "EQ",
+          values: [v.scopeMode],
+          validated: "Validated"
+        }];
+
+        // OrgUnit jen když ORGEH a máme klíč
+        if (v.scopeMode === "ORGEH" && v.orgUnit) {
+          oConds.OrgUnit = [{
+            operator: "EQ",
+            values: [v.orgUnit],
+            validated: "Validated"
+          }];
+        } else {
+          // když nejsme v ORGEH režimu, OrgUnit condition raději smaž
+          oConds.OrgUnit = [];
+        }
+
+        // Nastav do FE FilterBar (přepíše podmínky pro dané properties)
+        if (oFilterBar.setFilterConditions) {
+          oFilterBar.setFilterConditions(oConds);
+        } else if (oFilterBar.setConditions) {
+          // fallback pro jiné minor verze
+          oFilterBar.setConditions(oConds);
+        } else {
+          Log.warning("DZNP: FE FilterBar does not support setFilterConditions/setConditions");
+        }
+
+        Log.info("DZNP: OrgUnit selected -> synced to FE FilterBar conditions", oConds);
+
+        // Spusť search => FE udělá rebind tabulky s $filter
+        let bTriggered = false;
+        if (oFilterBar.triggerSearch) {
+          oFilterBar.triggerSearch();
+          bTriggered = true;
+        } else if (oFilterBar.fireSearch) {
+          oFilterBar.fireSearch();
+          bTriggered = true;
+        }
+
+        Log.info("DZNP: Search/rebind triggered: " + bTriggered);
+
+        // pokud by search nebyl dostupný (nestandard), fallback na přímý binding filtr
+        if (!bTriggered) {
+          this._applyTableFiltersAndRebind_Fallback();
+        }
+      } catch (e) {
+        Log.error("DZNP: _syncFeFiltersAndSearch FAILED", e);
+      }
+    },
+
+    // =========================================================
+    // Fallback: přímý filtr na binding tabulky (když FilterBar nejde)
+    // =========================================================
+    _getTableAndBinding: function () {
+      const oView = this.base.getView();
+
+      const aTableApi = oView.findAggregatedObjects(true, function (o) {
+        return o && o.isA && o.isA("sap.fe.macros.table.TableAPI");
+      });
+      const oTableApi = aTableApi && aTableApi[0];
+      if (!oTableApi) {
+        return null;
+      }
+
+      const aTables = oTableApi.findAggregatedObjects(true, function (o) {
+        return o && o.isA && (
+          o.isA("sap.m.Table") ||
+          o.isA("sap.ui.mdc.Table") ||
+          o.isA("sap.ui.table.Table")
+        );
+      });
+
+      const oTable = aTables && aTables[0];
+      if (!oTable) {
+        return null;
+      }
+
+      const sAggr = oTable.isA("sap.ui.table.Table") ? "rows" : "items";
+      const oBinding = oTable.getBinding(sAggr);
+
+      if (!oBinding) {
+        return null;
+      }
+
+      return { oTableApi, oTable, oBinding, sAggr };
+    },
+
+    _applyTableFiltersAndRebind_Fallback: function () {
+      try {
+        const oTB = this._getTableAndBinding();
+        if (!oTB) {
+          Log.warning("DZNP: Table/binding not ready yet -> retry (fallback)");
+          setTimeout(this._applyTableFiltersAndRebind_Fallback.bind(this), 250);
+          return;
+        }
+
+        const v = this._getCriteriaValues();
+
+        const aFilters = [
+          new Filter("ScopeMode", FilterOperator.EQ, v.scopeMode)
+        ];
+
+        if (v.scopeMode === "ORGEH" && v.orgUnit) {
+          aFilters.push(new Filter("OrgUnit", FilterOperator.EQ, v.orgUnit));
+        }
+
+        oTB.oBinding.filter(aFilters);
+        Log.info("DZNP: Fallback applied table filters (binding.filter).");
+      } catch (e) {
+        Log.error("DZNP: _applyTableFiltersAndRebind_Fallback FAILED", e);
+      }
     },
 
     // =========================================================
@@ -146,7 +268,9 @@ sap.ui.define([
     // =========================================================
     _injectCriteriaAboveTable: async function () {
       try {
-        if (this._bInjected) return;
+        if (this._bInjected) {
+          return;
+        }
 
         const oView = this.base.getView();
 
@@ -156,21 +280,19 @@ sap.ui.define([
 
         const oTableApi = aTableApi && aTableApi[0];
         if (!oTableApi) {
-          console.warn("DZNP: TableAPI not found yet, retry...");
+          Log.warning("DZNP: TableAPI not found yet, retry...");
           setTimeout(this._injectCriteriaAboveTable.bind(this), 300);
           return;
         }
 
         const oParent = oTableApi.getParent();
         if (!oParent) {
-          console.warn("DZNP: TableAPI parent not found");
+          Log.warning("DZNP: TableAPI parent not found");
           return;
         }
 
-        console.log(
-          "DZNP: TableAPI parent =", oParent.getMetadata().getName(),
-          "parentAggr =", oTableApi.sParentAggregationName
-        );
+        Log.info("DZNP: TableAPI parent = " + oParent.getMetadata().getName() +
+          " parentAggr = " + oTableApi.sParentAggregationName);
 
         if (!this._oCriteriaFrag) {
           this._sFragId = oView.createId("dznpCriteria");
@@ -186,14 +308,13 @@ sap.ui.define([
           const sAggr = "content";
           const oOldContent = oParent.getAggregation(sAggr);
 
-          if (
-            oOldContent
-            && oOldContent.isA
-            && oOldContent.isA("sap.m.VBox")
-            && oOldContent.data("dznpWrapped") === true
-          ) {
-            console.log("DZNP: DynamicPage.content already wrapped");
+          if (oOldContent && oOldContent.isA && oOldContent.isA("sap.m.VBox")
+            && oOldContent.data("dznpWrapped") === true) {
+            Log.info("DZNP: DynamicPage.content already wrapped");
             this._bInjected = true;
+
+            // po re-renderu znovu sync filtrů
+            this._syncFeFiltersAndSearch();
             return;
           }
 
@@ -210,15 +331,20 @@ sap.ui.define([
           oParent.setAggregation(sAggr, oBox);
 
           this._bInjected = true;
-          console.log("DZNP: Wrapped DynamicPage.content with VBox and inserted criteria ✅");
+          Log.info("DZNP: Wrapped DynamicPage.content with VBox and inserted criteria ✅");
 
+          // Approver
           this._fillApproverFromShell();
+
+          // inicializační sync (výchozí je Vedoucí => MGR)
+          this._syncFeFiltersAndSearch();
+
           return;
         }
 
-        console.warn("DZNP: Parent is not sap.f.DynamicPage – runtime struktura se změnila.");
+        Log.warning("DZNP: Parent is not sap.f.DynamicPage – runtime struktura se změnila.");
       } catch (e) {
-        console.error("DZNP: _injectCriteriaAboveTable FAILED", e);
+        Log.error("DZNP: _injectCriteriaAboveTable FAILED", e);
       }
     }
   });
