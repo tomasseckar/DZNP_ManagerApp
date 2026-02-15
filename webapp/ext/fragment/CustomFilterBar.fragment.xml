@@ -40,7 +40,25 @@
         </RadioButtonGroup>
 
         <Label id="dznpLblOrgUnit" text="Org. jednotka" />
-        <ComboBox id="dznpCbOrgUnit" enabled="false" placeholder="Organizační jednotka..." />
+
+        <!-- ✅ ValueHelp napojený na OData V4 entity set /OrgUnitVH -->
+      <ComboBox
+        id="dznpCbOrgUnit"
+        enabled="false"
+        placeholder="Organizační jednotka..."
+        showSecondaryValues="true"
+        selectionChange="onOrgUnitChanged"
+        items="{
+          path: '/OrgUnitVHUser'
+        }">
+
+        <core:ListItem
+          id="dznpLiOrgUnit"
+          key="{OrgUnit}"
+          text="{OrgUnitName}"
+          additionalText="{OrgUnit}" />
+
+      </ComboBox>
 
       </form:SimpleForm>
 

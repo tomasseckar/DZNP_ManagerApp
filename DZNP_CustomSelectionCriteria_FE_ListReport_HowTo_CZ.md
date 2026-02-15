@@ -15,6 +15,7 @@
 - [6) Je to "stable" a je to dobrá cesta?](#6-je-to-stable-a-je-to-dobrá-cesta)
 - [7) Mini checklist pro replikaci](#7-mini-checklist-pro-replikaci)
 - [8) Předvyplnění pole Schvalovatel (uživatel z FLP vs DEFAULT_USER)](#8-předvyplnění-pole-schvalovatel-uživatel-z-flp-vs-default_user)
+- [9) Organizační jednotky – value help omezený podle schvalovatele + napojení na FE filtry](#9-Organizační-jednotky–value-help-omezený-podle-schvalovatele-+-napojení-na-FE-filtry)
 
 ---
 
@@ -593,3 +594,207 @@ sap.ui.define([
 2) V BAS sandboxu je OK, že uvidíš `DEFAULT_USER` (není to chyba tvého kódu, ale prostředí).
 3) V konzoli uvidíš log `DZNP: Approver filled: ...`.
 
+
+## 9 Organizační jednotky – value help omezený podle schvalovatele + napojení na FE filtry
+
+### 9.1 Stav aktuálně
+- V UI už vidíme seznam organizačních jednotek v našem vlastním fragmentu (ComboBox). 
+- Backend má logiku “kdo je schvalovatel → jaké OU může vidět” už dnes v ABAPu (viz `ZCL_HR_DZNP_SCOPE`), ale **stávající CDS value help `ZI/ZC_DZNP_OrgUnitVH` je “globální”** (bere všechny OU) – proto to zatím není omezené.  
+- V BAS / lokálním běhu mimo FLP se v UserInfo často vrací `DEFAULT_USER`. To je normální – lokální sandbox/mock nemá reálný FLP user kontext.
+
+### 9.2 Co upravit v backendu (aby OU byly “jen moje”)
+Nejstabilnější cesta pro “omezený seznam podle uživatele” je udělat **custom entity (query)** implementovanou v ABAPu a v ní už řezat data podle `sy-uname` (nebo podle schvalovatele, pokud ho budeš posílat jako parametr).
+
+**Varianta A (doporučená): custom entity implementovaná ABAPem**
+1) Vytvoř custom entity např. `ZI_DZNP_OrgUnitVH_User` a query provider třídu (např. `ZCL_DZNP_ORGUNIT_VH_QP`).  
+2) V query provideru:
+   - zjisti uživatele: `sy-uname`
+   - použij existující logiku: `ZCL_HR_DZNP_SCOPE=>GET_ORGUNITS_FOR_MANAGER( iv_uname = sy-uname … )`
+   - vracej pouze OU z výsledku (Key + Text).
+3) Exponuj ji ve službě stejně, jako už exponuješ `OrgUnitVH`.
+
+**Proč ABAP query provider?**  
+Protože standardní CDS view neumí “zavolat ABAP metodu”. A tvoje logika (manager → OU) je už dnes v ABAPu – takže custom entity je nejrychlejší a nejméně bolestivý reuse.
+
+**Varianta B:** DCL (Access Control) nad CDS view  
+Dává smysl jen pokud máš (nebo chceš mít) persistovanou mapu `user ↔ OU` v tabulce a CDS view přes ni dokáže provést `exists` filtr. To je větší zásah do datového modelu.
+
+### 9.3 Co upravit ve FE aplikaci (kde to “dopsat”)
+Správně v `webapp/ext/controller/ListReport.controller.js` – to je controller extension LR.
+
+Napojení má 2 části:
+1) **Naplnit ComboBox daty (value help entita)**
+2) **Přenést vybranou OU do FE filtru `ORGUNIT` + nastavit `SCOPEMODE` a spustit “Go” (rebind/search)**
+
+#### 9.3.1 Binding ComboBox na OData V4 value help
+V XML fragmentu doporučuji udělat binding přímo, ať to nemusíne plnit “ručně” v JS:
+
+```xml
+<ComboBox
+  id="dznpCbOrgUnit"
+  enabled="false"
+  placeholder="Organizační jednotka..."
+  items="{
+    path: '/OrgUnitVH'
+  }">
+  <core:Item key="{Orgeh}" text="{Orgtx}" />
+</ComboBox>
+```
+
+**Pozor na flexEnabled:**  
+Nepoužívejte v template `<ListItem id=\"\" …>` – UI5 Language Assistant pak hlásí, že ListItem má prázdné ID. U ComboBox používej `core:Item` bez `id`.
+
+> Pokud je tvoje entita pojmenovaná jinak (ne `/OrgUnitVH`), uprav `path` podle `$metadata`.
+
+#### 9.3.2 Přenos vybrané OU do standardních FE filtrů (SCOPEMODE/ORGUNIT)
+Backend query provider `ZCL_DZNP_MGR_WL_QP` čte filtry pod názvy:
+- `SCOPEMODE`
+- `ORGUNIT`
+
+Takže ve FE stačí nastavit tyhle dvě “conditions” do mdc FilterBar a vyvolat search.
+
+Doplň do `ListReport.controller.js`:
+
+```js
+sap.ui.define([
+  "sap/ui/core/mvc/ControllerExtension",
+  "sap/ui/core/Fragment",
+  "sap/m/VBox",
+  "sap/ui/model/Filter",
+  "sap/ui/model/FilterOperator"
+], function (ControllerExtension, Fragment, VBox, Filter, FilterOperator) {
+  "use strict";
+
+  return ControllerExtension.extend("dznp.ext.controller.ListReport", {
+    // ...
+
+    onOrgUnitChanged: function (oEvent) {
+      const oCB = oEvent.getSource();
+      const sKey = oCB.getSelectedKey();
+
+      // když user vybere OU, nastav scope = ORGEH
+      this._applyFEFilter("SCOPEMODE", "ORGEH");
+      this._applyFEFilter("ORGUNIT", sKey);
+
+      // spust search (FE "Go")
+      this._triggerFESearch();
+    },
+
+    _applyFEFilter: function (sField, vValue) {
+      // Najdi FE mdc FilterBar (v LR bývá právě jedna)
+      const oView = this.base.getView();
+      const aFB = oView.findAggregatedObjects(true, o => o && o.isA && o.isA("sap.ui.mdc.FilterBar"));
+      const oFB = aFB && aFB[0];
+      if (!oFB) {
+        console.warn("DZNP: FilterBar not found");
+        return;
+      }
+
+      // OData V4 / MDC používá "conditions" strukturu
+      const mConditions = oFB.getFilterConditions() || {};
+      if (vValue) {
+        mConditions[sField] = [{ operator: "EQ", values: [vValue] }];
+      } else {
+        delete mConditions[sField];
+      }
+      oFB.setFilterConditions(mConditions);
+    },
+
+    _triggerFESearch: function () {
+      const oView = this.base.getView();
+      const aFB = oView.findAggregatedObjects(true, o => o && o.isA && o.isA("sap.ui.mdc.FilterBar"));
+      const oFB = aFB && aFB[0];
+      if (oFB && oFB.triggerSearch) {
+        oFB.triggerSearch();
+      } else {
+        // fallback přes extensionAPI – záleží na verzi FE
+        const oExtAPI = this.base.getExtensionAPI && this.base.getExtensionAPI();
+        if (oExtAPI && oExtAPI.refresh) {
+          oExtAPI.refresh();
+        }
+      }
+    }
+  });
+});
+```
+
+A ve fragmentu navěs event:
+
+```xml
+<ComboBox
+  id="dznpCbOrgUnit"
+  enabled="false"
+  placeholder="Organizační jednotka..."
+  change="onOrgUnitChanged"
+  items="{ path: '/OrgUnitVH' }">
+  <core:Item key="{Orgeh}" text="{Orgtx}" />
+</ComboBox>
+```
+
+> Tip: Když přepneš radio na “Vedoucí”, nastav `SCOPEMODE = MGR` a vymaž `ORGUNIT`.
+
+### 9.4 Proč je v BAS často DEFAULT_USER
+- `sap.ushell.Container.getService("UserInfo")` vrací FLP usera jen když běžíš **v FLP runtime**.
+- V lokálním “no-FLP” nebo mock režimu (`fiori run` + mockserver) často žádný FLP user není → mock vrací `DEFAULT_USER`.  
+- V reálném systému je rozhodující **serverová session** → `sy-uname` (OData request) bude reálný uživatel, a tím pádem se omezení OU začne chovat správně.
+
+### 9.5 Stav po kroku “value help” a další krok
+**Úspěch:** Value help pro OU v našem vlastním bloku funguje a seznam se zobrazuje.  
+**Další krok:** Omezit value help podle schvalovatele (server-side) a propojit vybranou OU do FE filterů (`SCOPEMODE/ORGUNIT`) tak, aby to filtr opravdu použil při načtení tabulky.
+### 9.4 Stav po úpravě (úspěch: omezené OU + texty se zobrazují)
+- Value help v ComboBoxu **vrací pouze organizační jednotky, které má aktuální schvalovatel vidět** (omezení dle backend logiky).   
+- Texty/názvy OU se v UI zobrazují správně (kombinace `text` + `additionalText`).   
+- Pozn.: v lokálním běhu mimo FLP je `DEFAULT_USER` očekávaný stav – reálný uživatel se dotáhne až ve FLP kontextu.
+
+### 9.5 Další krok: proč filtr na tabulku pořád “nefiltruje” a jak to opravit
+Pokud po výběru OU v našem ComboBoxu vidíš v tabulce pořád stejná data, téměř vždy je problém v tom, že **do FE FilterBaru nastavuješ špatné jméno pole**.
+
+V našem případě je to typicky:
+- V `$metadata` hlavní entity (worklist) se pole jmenuje **`OrgUnit`**  
+- Ale v JS se často omylem nastavuje **`OrganizationalUnit`** (label ze UI), což FilterBar ignoruje → do backendu nejde žádný `$filter`.
+
+#### 9.5.1 Ověření (rychlá kontrola)
+1) Otevři `$metadata` a najdi property na worklist entitě: hledej `OrgUnit`.  
+2) V Network tabu v prohlížeči zkontroluj request na worklist: musí obsahovat `$filter=OrgUnit eq '10001665'` (nebo ekvivalent v OData V4 syntax).
+
+#### 9.5.2 Oprava v `ListReport.controller.js` (změna názvu filtru)
+Najdi metodu, která nastavuje FE filtr pro OU (u tebe např. `_setFEFilter_OrganizationalUnit`) a oprav ji tak, aby nastavovala **`OrgUnit`**:
+
+```js
+_setFEFilter_OrgUnit: function (sOrgUnitKey) {
+  const oFB = this._getMdcFilterBar();
+  if (!oFB) return;
+
+  const m = oFB.getFilterConditions() || {};
+  if (sOrgUnitKey) {
+    m["OrgUnit"] = [{ operator: "EQ", values: [sOrgUnitKey] }];
+  } else {
+    delete m["OrgUnit"];
+  }
+  oFB.setFilterConditions(m);
+}
+```
+
+A v handleru ComboBoxu volej tuhle metodu (plus scope):
+
+```js
+onOrgUnitChanged: function (oEvent) {
+  const sKey = oEvent.getSource().getSelectedKey();
+
+  // když uživatel vybere OU, přepni scope na "ORG"
+  this._setFEFilter_ScopeMode("ORG");     // název hodnoty uprav podle backendu (např. ORG/ORGEH)
+  this._setFEFilter_OrgUnit(sKey);
+
+  this._triggerFESearch();               // ekvivalent FE tlačítka "Go"
+}
+```
+
+> Pozn.: Pokud backend očekává hodnotu `SCOPEMODE = 'ORGEH'` (nebo jiný kód), použij přesně tu hodnotu.
+
+#### 9.5.3 Kde se berou názvy `OrgUnit`/`SCOPEMODE`
+- **Název pole do FE filter conditions musí odpovídat property v `$metadata` hlavní entity** (worklistu), ne labelu.  
+- Backend (query provider / select) pak tyhle filtry čte z `io_request->get_filter( )` / `get_filter_conditions( )` podle property name.
+
+### 9.6 Zápis stavu do plánu
+- **9.x – Úspěch:** Value help pro organizační jednotky běží, je omezený dle schvalovatele a texty se zobrazují. ✅  
+- **Další práce:** napojit výběr OU na FE FilterBar přes správnou property (`OrgUnit`) a ověřit v Network, že se posílá `$filter` do backendu. ➜ pokračujeme na další část funkcionality.
