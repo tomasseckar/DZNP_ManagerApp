@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://sap.github.io/ui5-tooling/schema/ui5.yaml.json
+
+specVersion: "4.0"
+metadata:
+  name: dznp
+type: application
+builder:
+  resources:
+    excludes:
+      - /test/**
+      - /localService/**
+  customTasks:
+    - name: deploy-to-abap
+      afterTask: generateCachebusterInfo
+      configuration:
+        target:
+          destination: DF5-Wozniak
+          url: http://DF5.ext.cssz.cz:8005
+          client: '100'
+        app:
+          name: ZHR_DZNP_MANAGE
+          description: ZHR_DZNP_MANAGE
+          package: ZHR_DZNP_UI
+          transport: DF5K902658
+        exclude:
+          - /test/
