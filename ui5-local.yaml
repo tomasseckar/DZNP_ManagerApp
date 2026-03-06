@@ -33,7 +33,7 @@ server:
         backend:
           - path: /sap
             url: http://df5.ext.cssz.cz:8005
-            destination: DF5-Seckar
+            destination: DF5-Wozniak
     - name: sap-fe-mockserver
       beforeMiddleware: csp
       configuration:

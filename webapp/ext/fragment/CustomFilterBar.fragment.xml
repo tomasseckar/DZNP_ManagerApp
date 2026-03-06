@@ -3,7 +3,11 @@
   xmlns="sap.m"
   xmlns:form="sap.ui.layout.form">
 
-  <Panel id="dznpCustomCriteriaPanel" expandable="false" class="sapUiSmallMargin">
+  <Panel
+    id="dznpCustomCriteriaPanel"
+    expandable="false"
+    class="sapUiSmallMargin">
+
     <content>
 
       <form:SimpleForm
@@ -36,13 +40,39 @@
         </RadioButtonGroup>
 
         <Label id="dznpLblOrgUnit" text="Org. jednotka" />
-        <ComboBox id="dznpCbOrgUnit" enabled="false" placeholder="Organizační jednotka..." />
+
+        <!-- ✅ ValueHelp napojený na OData V4 entity set /OrgUnitVH -->
+      <ComboBox
+        id="dznpCbOrgUnit"
+        enabled="false"
+        placeholder="Organizační jednotka..."
+        showSecondaryValues="true"
+        selectionChange="onOrgUnitChanged"
+        items="{
+          path: '/OrgUnitVHUser'
+        }">
+
+        <core:ListItem
+          id="dznpLiOrgUnit"
+          key="{OrgUnit}"
+          text="{OrgUnitName}"
+          additionalText="{OrgUnit}" />
+
+      </ComboBox>
 
       </form:SimpleForm>
 
-      <Text id="dznpCustomCriteriaDebug"
-            text="DEBUG: Custom criteria fragment loaded ✅"
-            class="sapUiTinyMarginBegin"/>
+      <Text
+        id="dznpCustomCriteriaDebug"
+        text="DEBUG: Custom criteria fragment loaded ✅"
+        class="sapUiTinyMarginBegin"/>
+
+      <Button
+        id="dznpBtnTestNav"
+        text="Test: otevřít podání"
+        type="Emphasized"
+        class="sapUiSmallMarginTop"
+        press="onChevronPressNavigateOutBound" />
     </content>
   </Panel>
 
