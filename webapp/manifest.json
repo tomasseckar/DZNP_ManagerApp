@@ -34,6 +34,34 @@
           "odataVersion": "4.0"
         }
       }
+    },
+    "crossNavigation": {
+      "outbounds": {
+        "toPodani": {
+          "semanticObject": "DZNP",
+          "action": "podani",
+          "parameters": {
+            "PersonalNumber": {
+              "value": "{PersonalNumber}"
+            },
+            "BenefitSubtype": {
+              "value": "{BenefitSubtype}"
+            },
+            "ValidFromDate": {
+              "value": "{ValidFromDate}"
+            },
+            "ValidToDate": {
+              "value": "{ValidToDate}"
+            },
+            "SequenceNumber": {
+              "value": "{SequenceNumber}"
+            },
+            "mode": {
+              "value": "view"
+            }
+          }
+        }
+      }
     }
   },
   "sap.ui": {
@@ -71,7 +99,11 @@
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
-          "bundleName": "dznp.i18n.i18n"
+          "bundleName": "dznp.i18n.i18n",
+          "supportedLocales": [
+            ""
+          ],
+          "fallbackLocale": ""
         }
       },
       "": {
@@ -117,7 +149,7 @@
               "navigation": {
                 "ManagerWorklist": {
                   "detail": {
-                    "route": "ManagerWorklistObjectPage"
+                    "outbound": "toPodani"
                   }
                 }
               },

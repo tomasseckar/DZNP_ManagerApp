@@ -4,14 +4,16 @@ sap.ui.define([
   "sap/m/VBox",
   "sap/base/Log",
   "sap/ui/model/Filter",
-  "sap/ui/model/FilterOperator"
-], function (ControllerExtension, Fragment, VBox, Log, Filter, FilterOperator) {
+  "sap/ui/model/FilterOperator",
+  "sap/m/MessageToast"
+], function (ControllerExtension, Fragment, VBox, Log, Filter, FilterOperator, MessageToast) {
   "use strict";
 
   return ControllerExtension.extend("dznp.ext.controller.ListReport", {
     override: {
       onAfterRendering: function () {
         this._injectCriteriaAboveTable();
+        this._wireTableRowPressNavigation();
       }
     },
 
@@ -44,6 +46,186 @@ sap.ui.define([
     onOrgUnitChanged: function () {
       // OrgUnit změněna => sync + search
       this._syncFeFiltersAndSearch();
+    },
+
+    /**
+     * Cross-app navigate from DZNP-manage -> DZNP-podani
+     * Keeps deep link to FormDLO(...) and passes mode=edit.
+     * Called from row/chevron press handler.
+     */
+    navToPodaniFromManage: async function (extensionAPI, oRowContext, sMode) {
+      try {
+        if (!oRowContext) {
+          Log.warning("DZNP: navToPodaniFromManage called without row context");
+          return Promise.reject(new Error("no row context"));
+        }
+
+        // 1) vytažení klíčů z řádku (přizpůsob podle svého modelu)
+        const o = oRowContext.getObject();
+        const sPernr = o.PersonalNumber;
+        const sSubty = o.BenefitSubtype;
+        const sBegda = o.ValidFromDate;
+        const sEndda = o.ValidToDate;
+        const sSeqnr = o.SequenceNumber;
+
+        // 2) rozhodnutí jaká route v podani appce (FPM stránky)
+        const mPageBySubtype = {
+          DLO: "FormDLO",
+          OSE: "FormOSE",
+          OPP: "FormOPP",
+          PPM: "FormPPM"
+        };
+        const sPage = mPageBySubtype[sSubty] || `Form${sSubty}`;
+
+        // Parametry route (uprav podle target appky, pokud se názvy liší)
+        const mKey = {
+          pernr: "PersonalNumber",
+          subty: "BenefitSubtype",
+          begda: "ValidFromDate",
+          endda: "ValidToDate",
+          seqnr: "SequenceNumber"
+        };
+
+        const fnParam = function (v, bQuoteString) {
+          if (v === null || v === undefined || v === "") {
+            return "null";
+          }
+          const s = String(v);
+          const bIsNumeric = /^-?\d+(?:\.\d+)?$/.test(s);
+          const bIsTypedLiteral = /^(?:datetimeoffset|date|time|guid)'/i.test(s);
+          const sEncoded = encodeURIComponent(s);
+
+          if (!bQuoteString || bIsNumeric || bIsTypedLiteral) {
+            return sEncoded;
+          }
+          return `'${sEncoded}'`;
+        };
+
+        // 3) deep link route (tohle je to, co má být za &/ v cílové aplikaci)
+        const sAppSpecificRoute =
+          `${sPage}(` +
+          `${mKey.pernr}=${fnParam(sPernr, true)},` +
+          `${mKey.subty}=${fnParam(sSubty, true)},` +
+          `${mKey.begda}=${fnParam(sBegda, false)},` +
+          `${mKey.endda}=${fnParam(sEndda, false)},` +
+          `${mKey.seqnr}=${fnParam(sSeqnr, true)}` +
+          `)/`;
+
+  const sRouteWithMode = sMode ? `${sAppSpecificRoute}?mode=${encodeURIComponent(sMode)}` : sAppSpecificRoute;
+
+  Log.info("DZNP: Outbound appSpecificRoute = " + sRouteWithMode);
+
+        // Prefer CrossApplicationNavigation to avoid extra intent parameters (e.g. ScopeMode)
+        if (window.sap && sap.ushell && sap.ushell.Container && sap.ushell.Container.getServiceAsync) {
+          Log.info("DZNP: navigating via CrossApplicationNavigation");
+          const oCrossAppNav = await sap.ushell.Container.getServiceAsync("CrossApplicationNavigation");
+          return oCrossAppNav.toExternal({
+            target: {
+              semanticObject: "DZNP",
+              action: "podani"
+            },
+            appSpecificRoute: sRouteWithMode,
+            params: {}
+          });
+        }
+
+        // fallback: FE intentBasedNavigation
+        const oIBN = extensionAPI && extensionAPI.intentBasedNavigation;
+        if (oIBN && oIBN.navigateOutbound) {
+          Log.info("DZNP: navigating via intentBasedNavigation");
+          return oIBN.navigateOutbound("toPodani", {
+            appSpecificRoute: sRouteWithMode
+          });
+        }
+
+        Log.warning("DZNP: No navigation service available (not running in FLP?)");
+        return Promise.reject(new Error("no navigation service"));
+      } catch (e) {
+        Log.error("DZNP: navToPodaniFromManage failed", e);
+        return Promise.reject(e);
+      }
+    },
+
+    // =========================================================
+    // Wire row press -> outbound navigation (fallback when no XML wiring)
+    // =========================================================
+    _wireTableRowPressNavigation: function () {
+      if (this._bNavWired) {
+        return;
+      }
+
+      const oTB = this._getTableAndBinding();
+      if (!oTB) {
+        setTimeout(this._wireTableRowPressNavigation.bind(this), 250);
+        return;
+      }
+
+      const oTableApi = oTB.oTableApi;
+      const oTable = oTB.oTable;
+      const oBinding = oTB.oBinding;
+
+      const fnHandler = function (oEvent) {
+        const oCtx = this._getRowContextFromEvent(oEvent);
+        if (oCtx) {
+          this._lastRowContext = oCtx;
+          this.navToPodaniFromManage(this.base.getExtensionAPI(), oCtx, "edit");
+        } else {
+          Log.warning("DZNP: row press without context");
+        }
+      }.bind(this);
+
+      let bAttached = false;
+
+      if (oTableApi && oTableApi.attachRowPress) {
+        oTableApi.attachRowPress(fnHandler);
+        bAttached = true;
+      }
+
+      if (!bAttached && oTable && oTable.attachItemPress) {
+        oTable.attachItemPress(fnHandler);
+        bAttached = true;
+      }
+
+      if (!bAttached && oTable && oTable.attachRowSelectionChange) {
+        oTable.attachRowSelectionChange(fnHandler);
+        bAttached = true;
+      }
+
+      if (oBinding && oBinding.attachEventOnce) {
+        oBinding.attachEventOnce("dataReceived", function () {
+          const oFirst = this._getFirstContextFromBinding(oBinding);
+          if (oFirst) {
+            this._lastRowContext = oFirst;
+            Log.info("DZNP: stored first row context from dataReceived");
+          }
+        }.bind(this));
+      }
+
+      this._bNavWired = bAttached;
+      Log.info("DZNP: row press navigation wired = " + bAttached);
+    },
+
+    _getRowContextFromEvent: function (oEvent) {
+      if (!oEvent || !oEvent.getParameter) {
+        return null;
+      }
+
+      const oRowCtx = oEvent.getParameter("rowContext");
+      if (oRowCtx) {
+        return oRowCtx;
+      }
+
+      const oItem = oEvent.getParameter("listItem") || oEvent.getParameter("item");
+      if (oItem && oItem.getBindingContext) {
+        return oItem.getBindingContext();
+      }
+
+      const oSource = oEvent.getSource && oEvent.getSource();
+      if (oSource && oSource.getBindingContext) {
+        return oSource.getBindingContext();
+      }
+
+      return null;
     },
 
     // =========================================================
@@ -227,14 +409,21 @@ sap.ui.define([
         return null;
       }
 
-      const sAggr = oTable.isA("sap.ui.table.Table") ? "rows" : "items";
-      const oBinding = oTable.getBinding(sAggr);
+      let oBinding = null;
+      if (oTable.getRowBinding) {
+        oBinding = oTable.getRowBinding();
+      }
+
+      if (!oBinding) {
+        const sAggr = oTable.isA("sap.ui.table.Table") ? "rows" : "items";
+        oBinding = oTable.getBinding(sAggr);
+      }
 
       if (!oBinding) {
         return null;
       }
 
-      return { oTableApi, oTable, oBinding, sAggr };
+      return { oTableApi, oTable, oBinding };
     },
 
     _applyTableFiltersAndRebind_Fallback: function () {
@@ -345,6 +534,150 @@ sap.ui.define([
         Log.warning("DZNP: Parent is not sap.f.DynamicPage – runtime struktura se změnila.");
       } catch (e) {
         Log.error("DZNP: _injectCriteriaAboveTable FAILED", e);
+      }
+    }
+
+    ,
+
+    /**
+     * Handler for chevron/row press to navigate outbound to podani app
+     */
+    onChevronPressNavigateOutBound: function (oEvent) {
+      try {
+        Log.info("DZNP: Test nav button pressed");
+        const oSource = oEvent.getSource && oEvent.getSource();
+        let oCtx = oSource && oSource.getBindingContext && oSource.getBindingContext();
+
+        if (!oCtx) {
+          oCtx = this._lastRowContext || null;
+        }
+
+        if (!oCtx) {
+          oCtx = this._getSelectedRowContextFromTable();
+        }
+
+        if (!oCtx) {
+          return this._getFirstRowContextAsync(5, 300)
+            .then(function (oResolvedCtx) {
+              if (oResolvedCtx) {
+                return oResolvedCtx;
+              }
+              return this._getFirstRowContextFromModel();
+            }.bind(this))
+            .then(function (oResolvedCtx) {
+              if (!oResolvedCtx) {
+                Log.warning("DZNP: no row context available yet - wait for data or click a row once");
+                MessageToast.show("Nenalezen žádný řádek. Počkej na data nebo klikni na řádek.");
+                return null;
+              }
+              return this.navToPodaniFromManage(this.base.getExtensionAPI(), oResolvedCtx, "edit");
+            }.bind(this));
+        }
+
+        return this.navToPodaniFromManage(this.base.getExtensionAPI(), oCtx, "edit");
+      } catch (e) {
+        Log.error("DZNP: onChevronPressNavigateOutBound failed", e);
+        MessageToast.show("Chyba při navigaci – podrobnosti v konzoli.");
+      }
+    }
+    ,
+
+    _getSelectedRowContextFromTable: function () {
+      const oTB = this._getTableAndBinding();
+      if (!oTB) {
+        return null;
+      }
+
+      const oTable = oTB.oTable;
+      const oBinding = oTB.oBinding;
+
+      if (oTable && oTable.getSelectedContexts) {
+        const aSel = oTable.getSelectedContexts();
+        return aSel && aSel[0];
+      }
+
+      if (oTable && oTable.getSelectedIndex && oTable.getContextByIndex) {
+        const iIdx = oTable.getSelectedIndex();
+        if (iIdx >= 0) {
+          return oTable.getContextByIndex(iIdx);
+        }
+      }
+
+      if (oTable && oTable.getSelectedItem && oTable.getSelectedItem()) {
+        const oItem = oTable.getSelectedItem();
+        return oItem && oItem.getBindingContext && oItem.getBindingContext();
+      }
+
+      return this._getFirstContextFromBinding(oBinding);
+
+      return null;
+    },
+
+    _getFirstRowContextAsync: function (iRetries, iDelayMs) {
+      const oTB = this._getTableAndBinding();
+      if (!oTB || !oTB.oBinding) {
+        return Promise.resolve(null);
+      }
+
+      const oBinding = oTB.oBinding;
+      const oFirst = this._getFirstContextFromBinding(oBinding);
+      if (oFirst) {
+        return Promise.resolve(oFirst);
+      }
+
+      if (iRetries <= 0) {
+        return Promise.resolve(null);
+      }
+
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          this._getFirstRowContextAsync(iRetries - 1, iDelayMs).then(resolve);
+        }.bind(this), iDelayMs);
+      }.bind(this));
+    },
+
+    _getFirstContextFromBinding: function (oBinding) {
+      if (!oBinding) {
+        return null;
+      }
+
+      if (oBinding.getContexts) {
+        const aCtx = oBinding.getContexts(0, 1);
+        if (aCtx && aCtx[0]) {
+          return aCtx[0];
+        }
+      }
+
+      if (oBinding.getCurrentContexts) {
+        const aCtx = oBinding.getCurrentContexts();
+        if (aCtx && aCtx[0]) {
+          return aCtx[0];
+        }
+      }
+
+      if (oBinding.getAllCurrentContexts) {
+        const aCtx = oBinding.getAllCurrentContexts();
+        if (aCtx && aCtx[0]) {
+          return aCtx[0];
+        }
+      }
+
+      return null;
+    },
+
+    _getFirstRowContextFromModel: function () {
+      try {
+        const oModel = this.base.getView().getModel();
+        if (!oModel || !oModel.requestContexts) {
+          return Promise.resolve(null);
+        }
+
+        return oModel.requestContexts("/ManagerWorklist", 0, 1).then(function (aCtx) {
+          return aCtx && aCtx[0];
+        });
+      } catch (e) {
+        Log.warning("DZNP: failed to request contexts from model", e);
+        return Promise.resolve(null);
       }
     }
   });

@@ -66,6 +66,13 @@
         id="dznpCustomCriteriaDebug"
         text="DEBUG: Custom criteria fragment loaded ✅"
         class="sapUiTinyMarginBegin"/>
+
+      <Button
+        id="dznpBtnTestNav"
+        text="Test: otevřít podání"
+        type="Emphasized"
+        class="sapUiSmallMarginTop"
+        press="onChevronPressNavigateOutBound" />
     </content>
   </Panel>
 
