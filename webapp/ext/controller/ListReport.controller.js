@@ -20,6 +20,22 @@ sap.ui.define([
     // =========================================================
     // Eventy z fragmentu
     // =========================================================
+	onPressBttnYearDown: function () {
+		let inputYear = this._byFragId("dznpInpYear").getValue();
+		let inputYearInt = parseInt(inputYear);
+		this._byFragId("dznpInpYear").setValue(inputYearInt-1);
+
+		this._syncFeFiltersAndSearch();
+	},
+
+	onPressBttnYearUp: function () {
+		let inputYear = this._byFragId("dznpInpYear").getValue();
+		let inputYearInt = parseInt(inputYear);
+		this._byFragId("dznpInpYear").setValue(inputYearInt+1);
+
+		this._syncFeFiltersAndSearch();
+	},
+
     onScopeChanged: function (oEvent) {
       const iIdx = oEvent.getSource().getSelectedIndex(); // 0 = Vedoucí, 1 = Org
       const bOrg = iIdx === 1;
@@ -292,9 +308,17 @@ sap.ui.define([
       const oCB = this._byFragId("dznpCbOrgUnit");
       const sOrgKey = oCB && oCB.getSelectedKey ? (oCB.getSelectedKey() || "") : "";
 
+      // Seckar
+	    const sYear = this._byFragId("dznpInpYear").getValue();
+	    const sValidFromDateFrom = sYear + "-01-01";
+	    const sValidFromDateTo = sYear + "-12-31";
+
       return {
         scopeMode: sScopeValue,
-        orgUnit: sOrgKey
+        orgUnit: sOrgKey,
+        //Seckar
+		    validFromDateFrom: sValidFromDateFrom,
+		    validFromDateTo: sValidFromDateTo
       };
     },
 
@@ -348,6 +372,16 @@ sap.ui.define([
           // když nejsme v ORGEH režimu, OrgUnit condition raději smaž
           oConds.OrgUnit = [];
         }
+
+        // ValidFromDate jako range (Between)
+        oConds.ValidFromDate = [{
+          operator: "BT",
+          values: [
+            v.validFromDateFrom,
+            v.validFromDateTo
+          ],
+          validated: "Validated"
+        }];
 
         // Nastav do FE FilterBar (přepíše podmínky pro dané properties)
         if (oFilterBar.setFilterConditions) {
@@ -445,6 +479,16 @@ sap.ui.define([
           aFilters.push(new Filter("OrgUnit", FilterOperator.EQ, v.orgUnit));
         }
 
+      //Seckar
+      aFilters.push(
+        new Filter(
+          "ValidFromDate",
+          FilterOperator.BT,
+          v.validFromDateFrom,
+          v.validFromDateTo
+        )
+      );	
+
         oTB.oBinding.filter(aFilters);
         Log.info("DZNP: Fallback applied table filters (binding.filter).");
       } catch (e) {
@@ -524,6 +568,11 @@ sap.ui.define([
 
           // Approver
           this._fillApproverFromShell();
+
+      //Seckar
+		  // Year
+		  const currentYear = new Date().getFullYear();
+		  this._byFragId("dznpInpYear").setValue(currentYear);
 
           // inicializační sync (výchozí je Vedoucí => MGR)
           this._syncFeFiltersAndSearch();

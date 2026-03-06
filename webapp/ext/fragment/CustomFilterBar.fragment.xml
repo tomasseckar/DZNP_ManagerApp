@@ -23,7 +23,11 @@
         columnsM="1">
 
         <Label id="dznpLblYear" text="Rok" />
-        <Input id="dznpInpYear" width="10rem" />
+        <HBox id="dznpBxYear">
+          <Button id="dznpBttnYearDown" press="onPressBttnYearDown" icon="sap-icon://navigation-left-arrow" type="Transparent" tooltip="Rok dozadu"></Button>
+          <Input id="dznpInpYear" width="3rem" type="Number"/>
+          <Button id="dznpBttnYearUp" press="onPressBttnYearUp" icon="sap-icon://navigation-right-arrow" type="Transparent" tooltip="Rok dopředu"></Button>
+        </HBox>
 
         <Label id="dznpLblApprover" text="Schvalovatel" />
         <HBox id="dznpBxApprover">
