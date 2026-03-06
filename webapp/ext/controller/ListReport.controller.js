@@ -127,9 +127,16 @@ sap.ui.define([
           `${mKey.seqnr}=${fnParam(sSeqnr, true)}` +
           `)/`;
 
-  const sRouteWithMode = sMode ? `${sAppSpecificRoute}?mode=${encodeURIComponent(sMode)}` : sAppSpecificRoute;
+        Log.info("DZNP: Outbound appSpecificRoute = " + sAppSpecificRoute);
 
-  Log.info("DZNP: Outbound appSpecificRoute = " + sRouteWithMode);
+        // params that MUST appear in hash (before &/)
+        const mParams = {
+          "sap-ui-fl-disable": ["true"],
+          "sap-ui-xx-flex": ["disable"]
+        };
+        if (sMode) {
+          mParams.mode = [String(sMode)];
+        }
 
         // Prefer CrossApplicationNavigation to avoid extra intent parameters (e.g. ScopeMode)
         if (window.sap && sap.ushell && sap.ushell.Container && sap.ushell.Container.getServiceAsync) {
@@ -140,8 +147,8 @@ sap.ui.define([
               semanticObject: "DZNP",
               action: "podani"
             },
-            appSpecificRoute: sRouteWithMode,
-            params: {}
+            params: mParams,
+            appSpecificRoute: sAppSpecificRoute
           });
         }
 
@@ -149,9 +156,7 @@ sap.ui.define([
         const oIBN = extensionAPI && extensionAPI.intentBasedNavigation;
         if (oIBN && oIBN.navigateOutbound) {
           Log.info("DZNP: navigating via intentBasedNavigation");
-          return oIBN.navigateOutbound("toPodani", {
-            appSpecificRoute: sRouteWithMode
-          });
+          return oIBN.navigateOutbound("toPodani", mParams, sAppSpecificRoute);
         }
 
         Log.warning("DZNP: No navigation service available (not running in FLP?)");
