@@ -111,6 +111,10 @@
                             <PropertyValue Property="Value" Path="PersonalNumber"/>
                         </Record>
                         <Record Type="UI.DataField">
+                            <PropertyValue Property="Label" String="Datum založení"/>
+                            <PropertyValue Property="Value" Path="ValidFromDate"/>
+                        </Record>
+                        <Record Type="UI.DataField">
                             <PropertyValue Property="Label" String="Jméno"/>
                             <PropertyValue Property="Value" Path="EmployeeName"/>
                         </Record>
@@ -188,6 +192,30 @@
                     </Record>
                 </Annotation>
                 <Annotation Term="Common.ValueListWithFixedValues" Bool="true"/>
+            </Annotations>
+            <Annotations Target="SAP__self.approveByManager(SAP__self.ManagerWorklistType)">
+                <Annotation Term="Common.SideEffects">
+                    <Record Type="Common.SideEffectsType">
+                        <PropertyValue Property="TargetProperties">
+                            <Collection/>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetEntities">
+                            <Collection/>
+                        </PropertyValue>
+                    </Record>
+                </Annotation>
+            </Annotations>
+            <Annotations Target="SAP__self.rejectByManager(SAP__self.ManagerWorklistType)">
+                <Annotation Term="Common.SideEffects">
+                    <Record Type="Common.SideEffectsType">
+                        <PropertyValue Property="TargetProperties">
+                            <Collection/>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetEntities">
+                            <Collection/>
+                        </PropertyValue>
+                    </Record>
+                </Annotation>
             </Annotations>
         </Schema>
     </edmx:DataServices>

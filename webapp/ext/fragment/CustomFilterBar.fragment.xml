@@ -25,7 +25,7 @@
         <Label id="dznpLblYear" text="Rok" />
         <HBox id="dznpBxYear">
           <Button id="dznpBttnYearDown" press="onPressBttnYearDown" icon="sap-icon://navigation-left-arrow" type="Transparent" tooltip="Rok dozadu"></Button>
-          <Input id="dznpInpYear" width="3rem" type="Number"/>
+          <Input id="dznpInpYear" width="4.5rem" type="Number"/>
           <Button id="dznpBttnYearUp" press="onPressBttnYearUp" icon="sap-icon://navigation-right-arrow" type="Transparent" tooltip="Rok dopředu"></Button>
         </HBox>
 
@@ -66,17 +66,6 @@
 
       </form:SimpleForm>
 
-      <Text
-        id="dznpCustomCriteriaDebug"
-        text="DEBUG: Custom criteria fragment loaded ✅"
-        class="sapUiTinyMarginBegin"/>
-
-      <Button
-        id="dznpBtnTestNav"
-        text="Test: otevřít podání"
-        type="Emphasized"
-        class="sapUiSmallMarginTop"
-        press="onChevronPressNavigateOutBound" />
     </content>
   </Panel>
 
