@@ -132,12 +132,12 @@
                         </Record>
                         <Record Type="UI.DataFieldForAction">
                             <PropertyValue Property="Action" String="com.sap.gateway.srvd.zui_dznp_o4.v0001.approveByManager"/>
-                            <PropertyValue Property="Label" String="approveByManager"/>
+                            <PropertyValue Property="Label" String="Schválit"/>
                             <PropertyValue Property="Inline" Bool="true"/>
                         </Record>
                         <Record Type="UI.DataFieldForAction">
                             <PropertyValue Property="Action" String="com.sap.gateway.srvd.zui_dznp_o4.v0001.rejectByManager"/>
-                            <PropertyValue Property="Label" String="rejectByManager"/>
+                            <PropertyValue Property="Label" String="Zamítnout"/>
                             <PropertyValue Property="Inline" Bool="true"/>
                         </Record>
                     </Collection>
@@ -150,12 +150,12 @@
                         </Record>
                         <Record Type="UI.DataFieldForAction">
                             <PropertyValue Property="Action" String="com.sap.gateway.srvd.zui_dznp_o4.v0001.approveByManager"/>
-                            <PropertyValue Property="Label" String="approveByManager"/>
+                            <PropertyValue Property="Label" String="{@i18n>actionApproveLabel}"/>
                             <PropertyValue Property="Determining" Bool="true"/>
                         </Record>
                         <Record Type="UI.DataFieldForAction">
                             <PropertyValue Property="Action" String="com.sap.gateway.srvd.zui_dznp_o4.v0001.rejectByManager"/>
-                            <PropertyValue Property="Label" String="rejectByManager"/>
+                            <PropertyValue Property="Label" String="{@i18n>actionRejectLabel}"/>
                             <PropertyValue Property="Determining" Bool="true"/>
                         </Record>
                     </Collection>
