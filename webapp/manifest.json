@@ -121,7 +121,11 @@
       }
     },
     "resources": {
-      "css": []
+      "css": [
+        {
+          "uri": "css/style.css"
+        }
+      ]
     },
     "routing": {
       "config": {},
@@ -145,7 +149,7 @@
           "options": {
             "settings": {
               "contextPath": "/ManagerWorklist",
-              "variantManagement": "Page",
+              "variantManagement": "None",
               "navigation": {
                 "ManagerWorklist": {
                   "detail": {
@@ -158,6 +162,9 @@
                   "tableSettings": {
                     "type": "ResponsiveTable"
                   }
+                },
+                "@com.sap.vocabularies.UI.v1.SelectionFields": {
+                  "filterFields": {}
                 }
               },
               "defaultTemplateAnnotationPath": "com.sap.vocabularies.UI.v1.SelectionPresentationVariant#tableView"

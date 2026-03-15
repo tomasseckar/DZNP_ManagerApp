@@ -1,0 +1,8 @@
+/* Skryj hlášku "Žádné filtry nejsou aktivní" z FE FilterBar */
+.sapUiMdcFilterBarInfoToolbar,
+.sapMTB-Info-CTX[id*="filterInfoBar"],
+[id*="filterInfoBar"],
+#dznp\\3A \\3A ManagerWorklistList--fe\\3A \\3A appliedFiltersText,
+[id$="--fe::appliedFiltersText"] {
+    display: none !important;
+}

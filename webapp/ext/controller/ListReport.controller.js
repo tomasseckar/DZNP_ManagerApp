@@ -1339,6 +1339,35 @@ sap.ui.define([
           this._bInjected = true;
           Log.info("DZNP: Wrapped DynamicPage.content with VBox and inserted criteria ✅");
 
+          // Skryj standardní FE FilterBar – máme vlastní custom panel
+          try {
+            const oFilterBar = this._getFeFilterBar();
+            if (oFilterBar) {
+              oFilterBar.setVisible(false);
+              // Skryj také DynamicPageHeader pokud je prázdný
+              const oDynPage = oParent;
+              if (oDynPage.setHeaderExpanded) {
+                oDynPage.setHeaderExpanded(false);
+              }
+              if (oDynPage.setToggleHeaderOnTitleClick) {
+                oDynPage.setToggleHeaderOnTitleClick(false);
+              }
+              Log.info("DZNP: FE FilterBar hidden ✅");
+            }
+
+            // Skryj InfoToolbar "Žádné filtry nejsou aktivní"
+            const oView = this.base.getView();
+            const aInfoToolbars = oView.findAggregatedObjects(true, function (o) {
+              return o && o.isA && o.isA("sap.m.OverflowToolbar") &&
+                o.getStyle && o.getStyle() === "Info";
+            });
+            aInfoToolbars.forEach(function (oTb) {
+              oTb.setVisible(false);
+            });
+          } catch (eHide) {
+            Log.warning("DZNP: could not hide FE FilterBar", eHide);
+          }
+
           // Approver
           this._fillApproverFromShell();
 
@@ -1349,6 +1378,22 @@ sap.ui.define([
 
           // inicializační sync (výchozí je Vedoucí => MGR)
           this._syncFeFiltersAndSearch();
+
+          // Skryj info toolbar "Žádné filtry nejsou aktivní" – renderuje se až po searchi
+          setTimeout(function () {
+            try {
+              var el = document.getElementById("dznp::ManagerWorklistList--fe::appliedFiltersText");
+              if (el) {
+                // Skryj wrapper DIV sapFDynamicPageTitleSnapped (2 úrovně výš)
+                var oParent = el.parentElement && el.parentElement.parentElement;
+                if (oParent) {
+                  oParent.style.display = "none";
+                }
+              }
+            } catch (e) {
+              console.warn("DZNP: hide appliedFiltersText failed", e);
+            }
+          }.bind(this), 2000);
 
           return;
         }
