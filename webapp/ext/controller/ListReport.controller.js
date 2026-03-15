@@ -547,34 +547,43 @@ sap.ui.define([
     },
 
     _refreshTableAfterAction: function () {
+      // Primární refresh: přímý refresh na OData list binding
       try {
-        setTimeout(function () {
-          try {
-            this._syncFeFiltersAndSearch();
-          } catch (e) {
-            Log.warning("DZNP: _syncFeFiltersAndSearch failed after action", e);
+        const oTB = this._getTableAndBinding();
+        if (oTB) {
+          // 1) refresh binding -> nový $batch GET request
+          if (oTB.oBinding && oTB.oBinding.refresh) {
+            Log.info("DZNP: refreshing OData binding after action");
+            oTB.oBinding.refresh();
           }
-        }.bind(this), 200);
-      } catch (e) {
-        Log.warning("DZNP: refresh schedule failed", e);
-      }
-
-      const oTB = this._getTableAndBinding();
-      if (!oTB) {
-        this._hideActionBusy();
-        return;
-      }
-
-      if (oTB.oTableApi) {
-        if (oTB.oTableApi.rebind) {
-          oTB.oTableApi.rebind();
-        } else if (oTB.oTableApi.refresh) {
-          oTB.oTableApi.refresh();
+          // 2) rebind přes TableAPI pokud dostupné
+          if (oTB.oTableApi) {
+            if (oTB.oTableApi.rebind) {
+              oTB.oTableApi.rebind();
+            } else if (oTB.oTableApi.refresh) {
+              oTB.oTableApi.refresh();
+            }
+          }
+        } else {
+          Log.info("DZNP: TableAPI not found, falling back to FilterBar triggerSearch");
         }
+      } catch (e) {
+        Log.warning("DZNP: binding refresh failed", e);
       }
 
-      if (oTB.oBinding && oTB.oBinding.refresh) {
-        oTB.oBinding.refresh();
+      // Záloha: triggerSearch na FE FilterBar (vždy, zajistí i re-aplikaci filtrů)
+      try {
+        const oFilterBar = this._getFeFilterBar();
+        if (oFilterBar) {
+          if (oFilterBar.triggerSearch) {
+            Log.info("DZNP: triggerSearch on FilterBar after action");
+            oFilterBar.triggerSearch();
+          } else if (oFilterBar.fireSearch) {
+            oFilterBar.fireSearch();
+          }
+        }
+      } catch (e) {
+        Log.warning("DZNP: FilterBar triggerSearch failed after action", e);
       }
 
       this._hideActionBusy();
@@ -686,17 +695,19 @@ sap.ui.define([
 
       const fnOriginal = oContextProto.execute;
       const rAction = /approveByManager|rejectByManager/i;
+      const oController = this;
 
       oContextProto.execute = function () {
-        const sPath = this.getPath && this.getPath();
+        const oContext = this; // skutečný OData Context objekt
+        const sPath = oContext.getPath && oContext.getPath();
         const bIsAction = sPath && rAction.test(sPath);
-        const sKeyPredicate = bIsAction ? this._extractKeyPredicate(sPath) : null;
+        const sKeyPredicate = bIsAction ? oController._extractKeyPredicate(sPath) : null;
 
         if (bIsAction) {
           console.info("DZNP: Context.execute for action", { path: sPath, keyPredicate: sKeyPredicate });
         }
 
-        const vResult = fnOriginal.apply(this, arguments);
+        const vResult = fnOriginal.apply(oContext, arguments); // správný this = OData Context
         if (!bIsAction) {
           return vResult;
         }
@@ -705,20 +716,20 @@ sap.ui.define([
           .then(function (v) {
             console.info("DZNP: Context.execute resolved", { path: sPath });
             if (sKeyPredicate) {
-              this._removeRowByKeyPredicate(sKeyPredicate);
+              oController._removeRowByKeyPredicate(sKeyPredicate);
             }
-            this._refreshTableAfterAction();
+            oController._refreshTableAfterAction();
             return v;
-          }.bind(this))
+          })
           .catch(function (e) {
             console.info("DZNP: Context.execute rejected", { path: sPath, error: e });
             if (sKeyPredicate) {
-              this._removeRowByKeyPredicate(sKeyPredicate);
+              oController._removeRowByKeyPredicate(sKeyPredicate);
             }
-            this._refreshTableAfterAction();
+            oController._refreshTableAfterAction();
             throw e;
-          }.bind(this));
-      }.bind(this);
+          });
+      };
 
       this._bContextExecutePatched = true;
     },
