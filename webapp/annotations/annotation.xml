@@ -107,37 +107,37 @@
                 <Annotation Term="UI.LineItem">
                     <Collection>
                         <Record Type="UI.DataField">
-                            <PropertyValue Property="Label" String="{@i18n>col_personal_number}"/>
+                            <PropertyValue Property="Label" String="Os. číslo"/>
                             <PropertyValue Property="Value" Path="PersonalNumber"/>
                         </Record>
                         <Record Type="UI.DataField">
-                            <PropertyValue Property="Label" String="{@i18n>col_valid_from}"/>
+                            <PropertyValue Property="Label" String="Datum založení"/>
                             <PropertyValue Property="Value" Path="ValidFromDate"/>
                         </Record>
                         <Record Type="UI.DataField">
-                            <PropertyValue Property="Label" String="{@i18n>col_name}"/>
+                            <PropertyValue Property="Label" String="Jméno"/>
                             <PropertyValue Property="Value" Path="EmployeeName"/>
                         </Record>
                         <Record Type="UI.DataField">
-                            <PropertyValue Property="Label" String="{@i18n>col_subtype_text}"/>
+                            <PropertyValue Property="Label" String="Typ podání"/>
                             <PropertyValue Property="Value" Path="BenefitSubtypeText"/>
                         </Record>
                         <Record Type="UI.DataField">
-                            <PropertyValue Property="Label" String="{@i18n>col_status}"/>
+                            <PropertyValue Property="Label" String="Stav"/>
                             <PropertyValue Property="Value" Path="SubmissionStatus"/>
                         </Record>
                         <Record Type="UI.DataField">
-                            <PropertyValue Property="Label" String="{@i18n>col_status_text}"/>
+                            <PropertyValue Property="Label" String="Stav (text)"/>
                             <PropertyValue Property="Value" Path="SubmissionStatusText"/>
                         </Record>
                         <Record Type="UI.DataFieldForAction">
                             <PropertyValue Property="Action" String="com.sap.gateway.srvd.zui_dznp_o4.v0001.approveByManager"/>
-                            <PropertyValue Property="Label" String="{@i18n>action_approve}"/>
+                            <PropertyValue Property="Label" String="approveByManager"/>
                             <PropertyValue Property="Inline" Bool="true"/>
                         </Record>
                         <Record Type="UI.DataFieldForAction">
                             <PropertyValue Property="Action" String="com.sap.gateway.srvd.zui_dznp_o4.v0001.rejectByManager"/>
-                            <PropertyValue Property="Label" String="{@i18n>action_reject}"/>
+                            <PropertyValue Property="Label" String="rejectByManager"/>
                             <PropertyValue Property="Inline" Bool="true"/>
                         </Record>
                     </Collection>
@@ -145,17 +145,17 @@
                 <Annotation Term="UI.Identification">
                     <Collection>
                         <Record Type="UI.DataField">
-                            <PropertyValue Property="Label" String="{@i18n>col_personal_number}"/>
+                            <PropertyValue Property="Label" String="Os. číslo"/>
                             <PropertyValue Property="Value" Path="PersonalNumber"/>
                         </Record>
                         <Record Type="UI.DataFieldForAction">
                             <PropertyValue Property="Action" String="com.sap.gateway.srvd.zui_dznp_o4.v0001.approveByManager"/>
-                            <PropertyValue Property="Label" String="{@i18n>action_approve}"/>
+                            <PropertyValue Property="Label" String="approveByManager"/>
                             <PropertyValue Property="Determining" Bool="true"/>
                         </Record>
                         <Record Type="UI.DataFieldForAction">
                             <PropertyValue Property="Action" String="com.sap.gateway.srvd.zui_dznp_o4.v0001.rejectByManager"/>
-                            <PropertyValue Property="Label" String="{@i18n>action_reject}"/>
+                            <PropertyValue Property="Label" String="rejectByManager"/>
                             <PropertyValue Property="Determining" Bool="true"/>
                         </Record>
                     </Collection>
@@ -194,7 +194,6 @@
                 <Annotation Term="Common.ValueListWithFixedValues" Bool="true"/>
             </Annotations>
             <Annotations Target="SAP__self.approveByManager(SAP__self.ManagerWorklistType)">
-                <Annotation Term="Common.Label" String="{@i18n>action_approve}"/>
                 <Annotation Term="Common.SideEffects">
                     <Record Type="Common.SideEffectsType">
                         <PropertyValue Property="TargetProperties">
@@ -207,7 +206,6 @@
                 </Annotation>
             </Annotations>
             <Annotations Target="SAP__self.rejectByManager(SAP__self.ManagerWorklistType)">
-                <Annotation Term="Common.Label" String="{@i18n>action_reject}"/>
                 <Annotation Term="Common.SideEffects">
                     <Record Type="Common.SideEffectsType">
                         <PropertyValue Property="TargetProperties">
@@ -218,9 +216,6 @@
                         </PropertyValue>
                     </Record>
                 </Annotation>
-            </Annotations>
-            <Annotations Target="SAP__self.rejectByManager(SAP__self.ManagerWorklistType)/POCET1">
-                <Annotation Term="UI.Hidden" Bool="true"/>
             </Annotations>
         </Schema>
     </edmx:DataServices>

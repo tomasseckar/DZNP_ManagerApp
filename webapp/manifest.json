@@ -101,11 +101,9 @@
         "settings": {
           "bundleName": "dznp.i18n.i18n",
           "supportedLocales": [
-            "cs",
-            "en",
             ""
           ],
-          "fallbackLocale": "en"
+          "fallbackLocale": ""
         }
       },
       "": {
@@ -158,17 +156,7 @@
               "controlConfiguration": {
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
-                    "type": "GridTable"
-                  },
-                  "columns": {
-                    "DataFieldForAction::com.sap.gateway.srvd.zui_dznp_o4.v0001.approveByManager": {
-                      "header": "{{action_approve}}",
-                      "importance": "High"
-                    },
-                    "DataFieldForAction::com.sap.gateway.srvd.zui_dznp_o4.v0001.rejectByManager": {
-                      "header": "{{action_reject}}",
-                      "importance": "High"
-                    }
+                    "type": "ResponsiveTable"
                   }
                 }
               },
