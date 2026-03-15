@@ -589,6 +589,33 @@ sap.ui.define([
       this._hideActionBusy();
     },
 
+    _showActionToast: function (sActionIdentifier) {
+      console.info("DZNP: _showActionToast called with", sActionIdentifier);
+      var sMsg;
+      try {
+        var bApprove = /approveByManager/i.test(sActionIdentifier || "");
+        var bReject  = /rejectByManager/i.test(sActionIdentifier || "");
+        console.info("DZNP: toast bApprove=" + bApprove + " bReject=" + bReject);
+        if (!bApprove && !bReject) {
+          console.warn("DZNP: _showActionToast - no matching action in identifier, skipping toast");
+          return;
+        }
+        try {
+          var oBundle = this.base.getView().getModel("i18n").getResourceBundle();
+          sMsg = bApprove
+            ? oBundle.getText("actionApproveSuccess")
+            : oBundle.getText("actionRejectSuccess");
+        } catch (eBundle) {
+          console.warn("DZNP: i18n bundle not available, using fallback text", eBundle);
+          sMsg = bApprove ? "Podání bylo schváleno." : "Podání bylo zamítnuto.";
+        }
+        console.info("DZNP: showing MessageToast:", sMsg);
+        MessageToast.show(sMsg, { duration: 4000 });
+      } catch (e) {
+        console.error("DZNP: _showActionToast failed", e);
+      }
+    },
+
     _attachActionButtonPress: function () {
       if (this._bActionButtonPressAttached) {
         return;
@@ -658,18 +685,27 @@ sap.ui.define([
 
       const oExtApi = this.base && this.base.getExtensionAPI && this.base.getExtensionAPI();
       if (!oExtApi || !oExtApi.invokeAction) {
+        console.warn("DZNP: _patchInvokeActionRefresh - oExtApi or invokeAction not available, skipping patch");
         return;
       }
 
+      console.info("DZNP: _patchInvokeActionRefresh - patching invokeAction");
       const fnOriginal = oExtApi.invokeAction.bind(oExtApi);
       oExtApi.invokeAction = function () {
         const aArgs = Array.prototype.slice.call(arguments);
         console.info("DZNP: invokeAction called", aArgs);
 
+        // první argument je název akce (string nebo object s methodName)
+        const vActionArg = aArgs && aArgs[0];
+        const sActionName = (typeof vActionArg === "string")
+          ? vActionArg
+          : (vActionArg && (vActionArg.methodName || vActionArg.name || ""));
+
         const vResult = fnOriginal.apply(oExtApi, aArgs);
         return Promise.resolve(vResult)
           .then(function (v) {
             console.info("DZNP: invokeAction resolved");
+            this._showActionToast(sActionName);
             this._refreshTableAfterAction();
             return v;
           }.bind(this))
@@ -690,8 +726,11 @@ sap.ui.define([
 
       const oContextProto = sap && sap.ui && sap.ui.model && sap.ui.model.odata && sap.ui.model.odata.v4 && sap.ui.model.odata.v4.Context && sap.ui.model.odata.v4.Context.prototype;
       if (!oContextProto || !oContextProto.execute) {
+        console.warn("DZNP: _patchODataContextExecute - OData v4 Context.prototype.execute not found, skipping patch");
         return;
       }
+
+      console.info("DZNP: _patchODataContextExecute - patching Context.prototype.execute");
 
       const fnOriginal = oContextProto.execute;
       const rAction = /approveByManager|rejectByManager/i;
@@ -718,6 +757,8 @@ sap.ui.define([
             if (sKeyPredicate) {
               oController._removeRowByKeyPredicate(sKeyPredicate);
             }
+            // Show success toast for approve / reject
+            oController._showActionToast(sPath);
             oController._refreshTableAfterAction();
             return v;
           })
@@ -757,8 +798,62 @@ sap.ui.define([
           oDialog.data("dznpActionDialogHooked", true);
           console.info("DZNP: action dialog detected", sId);
 
+          // Determine action type from dialog ID
+          var bIsApprove = /approveByManager/i.test(sId);
+
+          // Hook the Begin/OK button (confirm) inside the dialog to detect successful submit
+          var fnHookButtons = function () {
+            // Collect all candidate buttons from dialog aggregations
+            var aCandidates = [];
+
+            // 1) beginButton / endButton (sap.m.Dialog)
+            if (oDialog.getBeginButton && oDialog.getBeginButton()) {
+              aCandidates.push(oDialog.getBeginButton());
+            }
+            if (oDialog.getEndButton && oDialog.getEndButton()) {
+              aCandidates.push(oDialog.getEndButton());
+            }
+
+            // 2) All nested buttons (footer toolbar etc.)
+            var aAll = oDialog.findAggregatedObjects ? oDialog.findAggregatedObjects(true, function (o) {
+              return o && o.isA && o.isA("sap.m.Button");
+            }) : [];
+            aCandidates = aCandidates.concat(aAll);
+
+            var bHookedAny = false;
+            aCandidates.forEach(function (oBtn) {
+              if (!oBtn || oBtn.data("dznpToastHooked")) return;
+              var sType = oBtn.getType && oBtn.getType();
+              var sText = (oBtn.getText && oBtn.getText()) || "";
+              console.info("DZNP: dialog button found type=" + sType + " text=" + sText);
+              // Confirm = Emphasized or Accept; Cancel/Close = Default/Transparent
+              if (sType === "Emphasized" || sType === "Accept") {
+                oBtn.data("dznpToastHooked", true);
+                bHookedAny = true;
+                console.info("DZNP: hooking confirm button in action dialog, text=" + sText);
+                oBtn.attachPress(function () {
+                  console.info("DZNP: action dialog confirm button pressed, bIsApprove=" + bIsApprove);
+                  this._pendingToastAction = bIsApprove ? "approve" : "reject";
+                }.bind(this));
+              }
+            }.bind(this));
+
+            if (!bHookedAny) {
+              console.warn("DZNP: no Emphasized/Accept button found in dialog yet, will retry");
+            }
+          }.bind(this);
+
+          // Try immediately and after a short delay (buttons may render late)
+          fnHookButtons();
+          setTimeout(fnHookButtons, 300);
+
           oDialog.attachAfterClose(function () {
-            console.info("DZNP: action dialog closed, refreshing list");
+            console.info("DZNP: action dialog closed, pendingToastAction=" + this._pendingToastAction);
+            if (this._pendingToastAction) {
+              var sPending = this._pendingToastAction;
+              this._pendingToastAction = null;
+              this._showActionToast(sPending === "approve" ? "approveByManager" : "rejectByManager");
+            }
             setTimeout(this._refreshTableAfterAction.bind(this), 300);
           }.bind(this));
         }.bind(this));
