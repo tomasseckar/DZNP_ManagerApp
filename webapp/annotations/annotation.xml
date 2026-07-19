@@ -219,6 +219,15 @@
                     </Record>
                 </Annotation>
             </Annotations>
+            <!-- UC-018: uprava schvalovaciho dialogu (approveByManager) -->
+            <!-- bod 1: skryt pole "Poznamka MU" (NOTE) v dialogu Schvalit -->
+            <Annotations Target="SAP__self.approveByManager(SAP__self.ManagerWorklistType)/NOTE">
+                <Annotation Term="UI.Hidden" Bool="true"/>
+            </Annotations>
+            <!-- bod 2: prejmenovat "Pocet odpracovanych" (POCET1) -->
+            <Annotations Target="SAP__self.approveByManager(SAP__self.ManagerWorklistType)/POCET1">
+                <Annotation Term="Common.Label" String="Počet odpracovaných hodin první den nepřítomnosti:"/>
+            </Annotations>
         </Schema>
     </edmx:DataServices>
 </edmx:Edmx>
