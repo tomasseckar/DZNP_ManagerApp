@@ -101,9 +101,11 @@
         "settings": {
           "bundleName": "dznp.i18n.i18n",
           "supportedLocales": [
-            ""
+            "",
+            "cs",
+            "en"
           ],
-          "fallbackLocale": ""
+          "fallbackLocale": "cs"
         }
       },
       "": {
