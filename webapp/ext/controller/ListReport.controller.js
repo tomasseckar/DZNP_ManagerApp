@@ -854,30 +854,55 @@ sap.ui.define([
             aInputs.forEach(function (oInp) {
               var oBind = oInp.getBinding && oInp.getBinding("value");
               var sPath = oBind && oBind.getPath && oBind.getPath();
-              if (!sPath || !/POCET1/i.test(sPath)) {
-                return;
+              // POCET1 rozpozname podle binding path; pokud path nedostupna,
+              // vezmeme jediny ciselny input v dialogu (NOTE je textove pole).
+              var bIsPocet = sPath ? /POCET1/i.test(sPath) : false;
+              if (!bIsPocet && sPath) {
+                return; // ma path, ale neni to POCET1 -> preskocit
               }
               var vVal = oInp.getValue && oInp.getValue();
-              if (vVal === "" || vVal === null || vVal === undefined) {
+              if (vVal === "" || vVal === null || vVal === undefined || vVal === "0,00000") {
+                if (vVal === "0,00000") {
+                  return; // uz je nastaveno
+                }
+                // 1) propsat do modelu (aby FE validace videla hodnotu)
+                if (sPath) {
+                  var oCtx = oInp.getBindingContext && oInp.getBindingContext();
+                  if (oCtx && oCtx.setProperty) {
+                    try { oCtx.setProperty(sPath, 0); } catch (e) { /* ignore */ }
+                  }
+                  if (oBind && oBind.setValue) {
+                    try { oBind.setValue(0); } catch (e2) { /* ignore */ }
+                  }
+                }
+                // 2) nastavit hodnotu do controlu + vyvolat change (commit + revalidace)
                 if (oInp.setValue) {
                   oInp.setValue("0");
                 }
-                // propsat do modelu, aby FE validace nehlasila prazdne pole
-                var oCtx = oInp.getBindingContext && oInp.getBindingContext();
-                if (oCtx && oCtx.setProperty) {
-                  try { oCtx.setProperty(sPath, 0); } catch (e) { /* ignore */ }
+                if (oInp.setValueState) {
+                  oInp.setValueState("None");
+                }
+                if (oInp.fireChange) {
+                  try { oInp.fireChange({ value: "0", newValue: "0" }); } catch (e3) { /* ignore */ }
                 }
                 console.info("DZNP: POCET1 default set to 0, path=" + sPath);
               }
             });
           };
 
-          // Try immediately and after a short delay (buttons may render late)
+          // Try immediately and after a short delay (buttons/fields may render late)
           fnHookButtons();
           setTimeout(fnHookButtons, 300);
           fnDefaultPocet1();
-          setTimeout(fnDefaultPocet1, 300);
-          setTimeout(fnDefaultPocet1, 800);
+          setTimeout(fnDefaultPocet1, 150);
+          setTimeout(fnDefaultPocet1, 400);
+          setTimeout(fnDefaultPocet1, 900);
+          if (oDialog.attachAfterOpen) {
+            oDialog.attachAfterOpen(function () {
+              fnDefaultPocet1();
+              setTimeout(fnDefaultPocet1, 200);
+            });
+          }
 
           oDialog.attachAfterClose(function () {
             console.info("DZNP: action dialog closed, pendingToastAction=" + this._pendingToastAction);
