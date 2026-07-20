@@ -228,6 +228,13 @@
             <Annotations Target="SAP__self.approveByManager(SAP__self.ManagerWorklistType)/POCET1">
                 <Annotation Term="Common.Label" String="Počet odpracovaných hodin první den nepřítomnosti:"/>
             </Annotations>
+            <!-- UC-018 bod 4: dialog Zamitnout - label "Duvod zamitnuti:", skryt irelevantni POCET1 -->
+            <Annotations Target="SAP__self.rejectByManager(SAP__self.ManagerWorklistType)/NOTE">
+                <Annotation Term="Common.Label" String="Důvod zamítnutí:"/>
+            </Annotations>
+            <Annotations Target="SAP__self.rejectByManager(SAP__self.ManagerWorklistType)/POCET1">
+                <Annotation Term="UI.Hidden" Bool="true"/>
+            </Annotations>
         </Schema>
     </edmx:DataServices>
 </edmx:Edmx>

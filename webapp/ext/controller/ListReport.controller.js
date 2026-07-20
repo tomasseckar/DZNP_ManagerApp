@@ -843,9 +843,41 @@ sap.ui.define([
             }
           }.bind(this);
 
+          // UC-018 bod 3: povolit "0" u pole POCET1.
+          // Pole je Nullable=false, takze prazdna hodnota vyvola FE validaci "Zadejte cislo".
+          // Predvyplnime POCET1 na "0" (pokud je prazdne), cimz umoznime schvaleni i s nulou
+          // a zaroven u zamitnuti (kde je POCET1 skryte) posleme validni 0 do BE.
+          var fnDefaultPocet1 = function () {
+            var aInputs = oDialog.findAggregatedObjects ? oDialog.findAggregatedObjects(true, function (o) {
+              return o && o.isA && (o.isA("sap.m.Input") || o.isA("sap.m.StepInput"));
+            }) : [];
+            aInputs.forEach(function (oInp) {
+              var oBind = oInp.getBinding && oInp.getBinding("value");
+              var sPath = oBind && oBind.getPath && oBind.getPath();
+              if (!sPath || !/POCET1/i.test(sPath)) {
+                return;
+              }
+              var vVal = oInp.getValue && oInp.getValue();
+              if (vVal === "" || vVal === null || vVal === undefined) {
+                if (oInp.setValue) {
+                  oInp.setValue("0");
+                }
+                // propsat do modelu, aby FE validace nehlasila prazdne pole
+                var oCtx = oInp.getBindingContext && oInp.getBindingContext();
+                if (oCtx && oCtx.setProperty) {
+                  try { oCtx.setProperty(sPath, 0); } catch (e) { /* ignore */ }
+                }
+                console.info("DZNP: POCET1 default set to 0, path=" + sPath);
+              }
+            });
+          };
+
           // Try immediately and after a short delay (buttons may render late)
           fnHookButtons();
           setTimeout(fnHookButtons, 300);
+          fnDefaultPocet1();
+          setTimeout(fnDefaultPocet1, 300);
+          setTimeout(fnDefaultPocet1, 800);
 
           oDialog.attachAfterClose(function () {
             console.info("DZNP: action dialog closed, pendingToastAction=" + this._pendingToastAction);
